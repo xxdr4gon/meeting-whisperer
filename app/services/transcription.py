@@ -8,25 +8,36 @@ from typing import Dict
 from ..config import settings
 
 
+WHISPER_CPP_BIN = "whisper-cli"  # updated name per whisper.cpp migration notice
+
+
 def _run_whisper_cpp(audio_path: str) -> Dict:
 	model_path = settings.model_path
-	tmp_json = tempfile.mktemp(suffix=".json")
+	tmp_prefix = tempfile.mktemp(prefix="wcpp_")
 	cmd = [
-		"whisper", audio_path,
-		"--model", model_path,
-		"--language", "auto",
-		"--output_format", "json",
-		"--output_file", tmp_json,
+		WHISPER_CPP_BIN,
+		"-m", model_path,
+		"-f", audio_path,
+		"-l", "auto",
+		"-oj",
+		"-of", tmp_prefix,
+		"-t", str(max(1, (os.cpu_count() or 4) // 2)),
 	]
 	subprocess.run(cmd, check=True)
-	data = json.loads(Path(tmp_json).read_text(encoding="utf-8"))
+	json_path = Path(tmp_prefix + ".json")
+	data = json.loads(json_path.read_text(encoding="utf-8"))
 	segments = []
 	for seg in data.get("segments", []):
 		segments.append({
-			"start": seg.get("start"),
-			"end": seg.get("end"),
-			"text": seg.get("text", "").strip(),
+			"start": seg.get("t0"),
+			"end": seg.get("t1"),
+			"text": (seg.get("text") or "").strip(),
 		})
+	for s in segments:
+		if isinstance(s.get("start"), (int, float)):
+			s["start"] = s["start"] / 100.0 if s["start"] > 1000 else s["start"]
+		if isinstance(s.get("end"), (int, float)):
+			s["end"] = s["end"] / 100.0 if s["end"] > 1000 else s["end"]
 	return {"segments": segments, "language": data.get("language", "en")}
 
 
@@ -45,7 +56,6 @@ def _run_faster_whisper(audio_path: str) -> Dict:
 def _run_openai_whisper(audio_path: str) -> Dict:
 	import whisper as ow
 	device = "cuda" if settings.enable_gpu else "cpu"
-	# MODEL_PATH can be a model name (e.g., "base") or a local directory containing the model
 	model_ref = settings.model_path if settings.model_path else "base"
 	model = ow.load_model(model_ref, device=device)
 	result = model.transcribe(audio_path)

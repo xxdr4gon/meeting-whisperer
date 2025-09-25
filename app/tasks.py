@@ -25,9 +25,10 @@ def _extract_audio(video_path: str) -> str:
 
 
 def _update_progress(current_task, stage: str, percent: int):
-	meta = current_task.info or {}
+	meta = getattr(current_task, "_progress_meta", {})
 	meta["stage"] = stage
 	meta["percent"] = percent
+	setattr(current_task, "_progress_meta", meta)
 	current_task.update_state(state=states.STARTED, meta=meta)
 
 

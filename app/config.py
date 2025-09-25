@@ -60,8 +60,10 @@ class Settings(BaseSettings):
 	gpu_backend: str | None = Field(default=None, alias="GPU_BACKEND")
 	gpu_device_id: int = Field(default=0, alias="GPU_DEVICE_ID")
 
+	# Pyannote diarization
 	pyannote_auth_token: str | None = Field(default=None, alias="PYANNOTE_AUTH_TOKEN")
 	pyannote_diarization_model: str = Field(default="pyannote/speaker-diarization-3.1", alias="PYANNOTE_DIARIZATION_MODEL")
+	pyannote_local_path: str | None = Field(default=None, alias="PYANNOTE_LOCAL_PATH")
 
 	# Security / CORS
 	allowed_origins: List[str] = Field(default_factory=lambda: ["*"], alias="ALLOWED_ORIGINS")
@@ -75,6 +77,7 @@ class Settings(BaseSettings):
 	class Config:
 		env_file = ".env"
 		case_sensitive = False
+		protected_namespaces = ("settings_",)
 
 
 settings = Settings()  # type: ignore
