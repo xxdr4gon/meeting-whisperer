@@ -1,0 +1,66 @@
+version: "3.9"
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  app:
+    build: .
+    environment:
+      - APP_PORT=${APP_PORT:-8080}
+      - APP_HOST=${APP_HOST:-0.0.0.0}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - BROKER_URL=${BROKER_URL:-redis://redis:6379/1}
+      - RESULT_BACKEND=${RESULT_BACKEND:-redis://redis:6379/2}
+      - UPLOAD_DIR=${UPLOAD_DIR:-/data/uploads}
+      - TRANSCRIPT_DIR=${TRANSCRIPT_DIR:-/data/transcripts}
+      - MODEL_PATH=${MODEL_PATH:-/models/ggml-base.bin}
+      - ENABLE_GPU=${ENABLE_GPU:-false}
+      - GPU_BACKEND=${GPU_BACKEND:-}
+      - GPU_DEVICE_ID=${GPU_DEVICE_ID:-0}
+      - LOCAL_ADMIN_ENABLED=${LOCAL_ADMIN_ENABLED:-true}
+      - LOCAL_ADMIN_USERNAME=${LOCAL_ADMIN_USERNAME:-admin}
+      - LOCAL_ADMIN_PASSWORD=${LOCAL_ADMIN_PASSWORD:-changeme}
+      - LOCAL_ADMIN_EMAIL=${LOCAL_ADMIN_EMAIL:-admin@example.com}
+      - OIDC_DISCOVERY_URL
+      - OIDC_CLIENT_ID
+      - OIDC_CLIENT_SECRET
+      - OIDC_AUDIENCE
+      - OIDC_ISSUER
+      - OIDC_ALLOWED_ALGS
+      - ROLE_CLAIM_PATH
+      - ROLE_MAPPING_JSON
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASSWORD
+      - SMTP_TLS
+      - SMTP_FROM
+      - PYANNOTE_AUTH_TOKEN
+      - PYANNOTE_DIARIZATION_MODEL
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+    volumes:
+      - ./data:/data
+      - ./models:/models
+  worker:
+    build: .
+    command: ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=INFO"]
+    environment:
+      - BROKER_URL=${BROKER_URL:-redis://redis:6379/1}
+      - RESULT_BACKEND=${RESULT_BACKEND:-redis://redis:6379/2}
+      - UPLOAD_DIR=${UPLOAD_DIR:-/data/uploads}
+      - TRANSCRIPT_DIR=${TRANSCRIPT_DIR:-/data/transcripts}
+      - MODEL_PATH=${MODEL_PATH:-/models/ggml-base.bin}
+      - ENABLE_GPU=${ENABLE_GPU:-false}
+      - GPU_BACKEND=${GPU_BACKEND:-}
+      - GPU_DEVICE_ID=${GPU_DEVICE_ID:-0}
+      - PYANNOTE_AUTH_TOKEN
+      - PYANNOTE_DIARIZATION_MODEL
+    depends_on:
+      - redis
+    volumes:
+      - ./data:/data
+      - ./models:/models

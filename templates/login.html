@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Login - Transcription Service</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+	<div class="w-full max-w-md bg-white shadow rounded-lg p-8">
+		<h1 class="text-2xl font-semibold text-gray-800 mb-6">Sign in</h1>
+		<form id="login-form" class="space-y-4">
+			<div>
+				<label class="block text-sm font-medium text-gray-700">Username</label>
+				<input id="username" type="text" class="mt-1 block w-full rounded border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" required />
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-gray-700">Password</label>
+				<input id="password" type="password" class="mt-1 block w-full rounded border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" required />
+			</div>
+			<button type="submit" class="w-full inline-flex justify-center rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">Login</button>
+			<p id="error" class="text-sm text-red-600 hidden"></p>
+		</form>
+		<div class="mt-6 text-sm text-gray-600">
+			<p>Or sign in with your organization via OIDC/SAML if configured.</p>
+		</div>
+	</div>
+	<script>
+	const form = document.getElementById('login-form');
+	const errorP = document.getElementById('error');
+	form.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		const username = document.getElementById('username').value;
+		const password = document.getElementById('password').value;
+		try {
+			const res = await fetch('/api/auth/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ username, password })
+			});
+			if (!res.ok) {
+				throw new Error('Invalid credentials');
+			}
+			const data = await res.json();
+			localStorage.setItem('token', data.access_token);
+			window.location.href = '/dashboard';
+		} catch (err) {
+			errorP.classList.remove('hidden');
+			errorP.textContent = err.message;
+		}
+	});
+	</script>
+</body>
+</html>

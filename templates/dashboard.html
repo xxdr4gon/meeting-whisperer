@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Dashboard - Transcription Service</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-50">
+	<header class="bg-white shadow">
+		<div class="mx-auto max-w-7xl px-4 py-4 flex justify-between items-center">
+			<h1 class="text-xl font-semibold text-gray-800">Transcription Dashboard</h1>
+			<button id="logout" class="text-sm text-gray-600 hover:text-gray-900">Logout</button>
+		</div>
+	</header>
+	<main class="mx-auto max-w-3xl p-4">
+		<section class="bg-white shadow rounded-lg p-6 mt-6">
+			<h2 class="text-lg font-medium text-gray-800 mb-4">Upload Video</h2>
+			<form id="upload-form" class="space-y-4">
+				<input id="video" type="file" accept="video/*" class="block w-full" required />
+				<button type="submit" class="inline-flex justify-center rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">Upload</button>
+			</form>
+			<p id="upload-status" class="text-sm text-gray-600 mt-2"></p>
+		</section>
+
+		<section class="bg-white shadow rounded-lg p-6 mt-6">
+			<h2 class="text-lg font-medium text-gray-800 mb-4">Recent Jobs</h2>
+			<ul id="jobs" class="space-y-2 text-sm text-gray-700"></ul>
+		</section>
+	</main>
+	<script>
+	const token = localStorage.getItem('token');
+	if (!token) { window.location.href = '/login'; }
+
+	document.getElementById('logout').addEventListener('click', () => {
+		localStorage.removeItem('token');
+		window.location.href = '/login';
+	});
+
+	const uploadForm = document.getElementById('upload-form');
+	const uploadStatus = document.getElementById('upload-status');
+	const jobsEl = document.getElementById('jobs');
+
+	uploadForm.addEventListener('submit', async (e) => {
+		e.preventDefault();
+		const fileInput = document.getElementById('video');
+		const file = fileInput.files[0];
+		const fd = new FormData();
+		fd.append('file', file);
+		uploadStatus.textContent = 'Uploading...';
+		try {
+			const res = await fetch('/api/upload', {
+				method: 'POST',
+				headers: { 'Authorization': 'Bearer ' + token },
+				body: fd
+			});
+			if (!res.ok) throw new Error('Upload failed');
+			const data = await res.json();
+			uploadStatus.textContent = 'Job ' + data.job_id + ' queued.';
+			addJob(data.job_id);
+		} catch (err) {
+			uploadStatus.textContent = err.message;
+		}
+	});
+
+	function addJob(jobId) {
+		const li = document.createElement('li');
+		li.dataset.jobId = jobId;
+		li.innerHTML = `<div class="flex justify-between items-center">
+			<span>Job: ${jobId}</span>
+			<div class="space-x-2">
+				<button data-action="status" class="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">Status</button>
+				<a data-action="txt" class="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200" href="#">TXT</a>
+				<a data-action="json" class="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200" href="#">JSON</a>
+			</div>
+		</div>`;
+		jobsEl.prepend(li);
+	}
+
+	jobsEl.addEventListener('click', async (e) => {
+		const btn = e.target.closest('button, a');
+		if (!btn) return;
+		const li = btn.closest('li');
+		const jobId = li.dataset.jobId;
+		const action = btn.dataset.action;
+		if (action === 'status') {
+			const res = await fetch('/api/status/' + jobId, { headers: { 'Authorization': 'Bearer ' + token } });
+			if (res.ok) {
+				const data = await res.json();
+				alert('Status: ' + data.status);
+			}
+		} else if (action === 'txt' || action === 'json') {
+			const fmt = action;
+			const res = await fetch('/api/transcript/' + jobId + '?format=' + fmt, { headers: { 'Authorization': 'Bearer ' + token } });
+			if (res.ok) {
+				const blob = await res.blob();
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = `transcript_${jobId}.${fmt === 'json' ? 'json' : 'txt'}`;
+				a.click();
+				URL.revokeObjectURL(url);
+			}
+		}
+	});
+	</script>
+</body>
+</html>
