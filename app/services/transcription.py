@@ -80,6 +80,7 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
             device=device_index,
             return_timestamps=True,
             ignore_warning=True,
+            use_safetensors=True,  # Use safetensors to avoid torch.load vulnerability
             generate_kwargs={
                 "language": "et",
                 "task": "transcribe",
