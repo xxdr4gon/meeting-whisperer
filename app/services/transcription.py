@@ -75,13 +75,17 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
         else:
             print(f"Using pre-downloaded Estonian model from {local_dir}")
         # Verify the model files exist (Estonian model uses vocab.json + merges.txt instead of tokenizer.json)
-        required_files = ["config.json", "preprocessor_config.json", "pytorch_model.bin"]
+        required_files = ["config.json", "preprocessor_config.json"]
+        model_files = ["pytorch_model.bin", "model.safetensors"]  # Either pytorch or safetensors format
         tokenizer_files = ["vocab.json", "merges.txt", "tokenizer_config.json"]  # Estonian model uses BPE tokenizer
+        
         missing_files = [f for f in required_files if not os.path.exists(os.path.join(local_dir, f))]
+        missing_model = not any(os.path.exists(os.path.join(local_dir, f)) for f in model_files)
         missing_tokenizer = [f for f in tokenizer_files if not os.path.exists(os.path.join(local_dir, f))]
         
-        if missing_files or missing_tokenizer:
-            print(f"Missing required files: {missing_files + missing_tokenizer}")
+        if missing_files or missing_model or missing_tokenizer:
+            missing_list = missing_files + (["model files"] if missing_model else []) + missing_tokenizer
+            print(f"Missing required files: {missing_list}")
             print("Re-downloading model...")
             local_dir = snapshot_download(
                 repo_id=model_name,
@@ -100,8 +104,9 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
             # Try loading from local directory first
             model = WhisperForConditionalGeneration.from_pretrained(
                 local_dir,
-                torch_dtype=torch.float32,
-                low_cpu_mem_usage=True
+                dtype=torch.float32,  # Use dtype instead of torch_dtype
+                low_cpu_mem_usage=True,
+                use_safetensors=True  # Use safetensors to avoid torch.load vulnerability
             )
             processor = WhisperProcessor.from_pretrained(local_dir)
             print("✅ Loaded model and processor from local directory")
@@ -112,8 +117,9 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
                 # Download directly from Hugging Face as fallback
                 model = WhisperForConditionalGeneration.from_pretrained(
                     model_name,
-                    torch_dtype=torch.float32,
-                    low_cpu_mem_usage=True
+                    dtype=torch.float32,  # Use dtype instead of torch_dtype
+                    low_cpu_mem_usage=True,
+                    use_safetensors=True  # Use safetensors to avoid torch.load vulnerability
                 )
                 processor = WhisperProcessor.from_pretrained(model_name)
                 # Save to local directory for future use
