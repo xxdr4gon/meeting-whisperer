@@ -95,11 +95,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(b
 	if settings.local_admin_enabled and local_user:
 		return local_user
 
-    cfg = await _get_openid_config()
-    jwks_uri = cfg.get("jwks_uri")
-    if not jwks_uri:
-        # No IdP configured; reject with 401 instead of 503 to avoid false service errors
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No IdP configured and local token not provided")
+	cfg = await _get_openid_config()
+	jwks_uri = cfg.get("jwks_uri")
+	if not jwks_uri:
+		# No IdP configured; reject with 401 instead of 503 to avoid false service errors
+		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No IdP configured and local token not provided")
 	unverified = jwt.get_unverified_header(token)
 	kid = unverified.get("kid")
 	if not kid:
