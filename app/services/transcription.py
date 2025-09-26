@@ -99,13 +99,19 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
         
         print("Loading Whisper model and processor...")
         try:
-            # Try loading from local directory first
+            # Try loading from local directory first with trust_remote_code
             model = WhisperForConditionalGeneration.from_pretrained(
                 local_dir,
-                dtype=torch.float32,  # Use dtype instead of torch_dtype
-                low_cpu_mem_usage=True
+                dtype=torch.float32,
+                low_cpu_mem_usage=True,
+                trust_remote_code=True,  # Allow custom code
+                local_files_only=True   # Only use local files
             )
-            processor = WhisperProcessor.from_pretrained(local_dir)
+            processor = WhisperProcessor.from_pretrained(
+                local_dir,
+                trust_remote_code=True,
+                local_files_only=True
+            )
             print("✅ Loaded model and processor from local directory")
         except Exception as e:
             print(f"Failed to load from local directory: {e}")
@@ -114,10 +120,14 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
                 # Download directly from Hugging Face as fallback
                 model = WhisperForConditionalGeneration.from_pretrained(
                     model_name,
-                    dtype=torch.float32,  # Use dtype instead of torch_dtype
-                    low_cpu_mem_usage=True
+                    dtype=torch.float32,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True
                 )
-                processor = WhisperProcessor.from_pretrained(model_name)
+                processor = WhisperProcessor.from_pretrained(
+                    model_name,
+                    trust_remote_code=True
+                )
                 # Save to local directory for future use
                 model.save_pretrained(local_dir)
                 processor.save_pretrained(local_dir)
