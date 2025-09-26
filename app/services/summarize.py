@@ -1,29 +1,122 @@
-from collections import Counter
 import re
-from typing import List
-
-SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
-WORD_RE = re.compile(r"[\w']+")
+from typing import List, Dict, Any
 
 
-def split_sentences(text: str) -> List[str]:
-	return [s.strip() for s in SENT_SPLIT.split(text) if s.strip()]
+def summarize_text(text: str, max_sentences: int = 7) -> str:
+    """Enhanced memo-style summarization with structured analysis."""
+    if not text or not text.strip():
+        return "No content to summarize."
+    
+    # Split into sentences
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    if len(sentences) <= 3:
+        return text
+    
+    # Analyze content for memo structure
+    analysis = analyze_content(sentences)
+    
+    # Generate structured memo
+    memo = generate_memo(analysis, sentences)
+    
+    return memo
 
 
-def summarize_text(text: str, max_sentences: int = 5) -> str:
-	if not text:
-		return ""
-	sentences = split_sentences(text)
-	if len(sentences) <= max_sentences:
-		return text
-	words = WORD_RE.findall(text.lower())
-	freq = Counter(words)
-	# score sentences by sum of word frequencies
-	scored = []
-	for idx, s in enumerate(sentences):
-		tokens = WORD_RE.findall(s.lower())
-		score = sum(freq.get(t, 0) for t in tokens)
-		scored.append((score, idx, s))
-	scored.sort(reverse=True)
-	top = sorted(scored[:max_sentences], key=lambda x: x[1])
-	return " ".join(s for _, _, s in top)
+def analyze_content(sentences: List[str]) -> Dict[str, Any]:
+    """Analyze content to identify key themes, problems, and solutions."""
+    problems = []
+    solutions = []
+    decisions = []
+    key_points = []
+    action_items = []
+    
+    # Keywords for different categories
+    problem_keywords = ['problem', 'issue', 'challenge', 'difficulty', 'concern', 'trouble', 'error', 'bug', 'fault']
+    solution_keywords = ['solution', 'fix', 'resolve', 'address', 'implement', 'create', 'develop', 'build', 'solve']
+    decision_keywords = ['decide', 'decision', 'choose', 'select', 'agree', 'approve', 'reject', 'conclude', 'determine']
+    action_keywords = ['action', 'task', 'todo', 'next', 'follow', 'implement', 'execute', 'do', 'complete', 'finish']
+    
+    for sentence in sentences:
+        sentence_lower = sentence.lower()
+        
+        # Check for problems
+        if any(keyword in sentence_lower for keyword in problem_keywords):
+            problems.append(sentence)
+        # Check for solutions
+        elif any(keyword in sentence_lower for keyword in solution_keywords):
+            solutions.append(sentence)
+        # Check for decisions
+        elif any(keyword in sentence_lower for keyword in decision_keywords):
+            decisions.append(sentence)
+        # Check for action items
+        elif any(keyword in sentence_lower for keyword in action_keywords):
+            action_items.append(sentence)
+        # Other important sentences (longer, with specific patterns)
+        elif len(sentence.split()) > 8 and any(word in sentence_lower for word in ['important', 'key', 'main', 'primary', 'critical', 'essential']):
+            key_points.append(sentence)
+    
+    return {
+        'problems': problems[:3],  # Limit to top 3
+        'solutions': solutions[:3],
+        'decisions': decisions[:2],
+        'key_points': key_points[:3],
+        'action_items': action_items[:3],
+        'total_sentences': len(sentences)
+    }
+
+
+def generate_memo(analysis: Dict[str, Any], sentences: List[str]) -> str:
+    """Generate a structured memo from the analysis."""
+    memo_parts = []
+    
+    # Header
+    memo_parts.append("📋 MEETING SUMMARY")
+    memo_parts.append("=" * 50)
+    
+    # Overview
+    memo_parts.append(f"\n📊 OVERVIEW")
+    memo_parts.append(f"Total discussion points: {analysis['total_sentences']} statements")
+    
+    # Problems identified
+    if analysis['problems']:
+        memo_parts.append(f"\n🚨 PROBLEMS IDENTIFIED")
+        for i, problem in enumerate(analysis['problems'], 1):
+            memo_parts.append(f"{i}. {problem}")
+    
+    # Solutions discussed
+    if analysis['solutions']:
+        memo_parts.append(f"\n💡 SOLUTIONS DISCUSSED")
+        for i, solution in enumerate(analysis['solutions'], 1):
+            memo_parts.append(f"{i}. {solution}")
+    
+    # Decisions made
+    if analysis['decisions']:
+        memo_parts.append(f"\n✅ DECISIONS MADE")
+        for i, decision in enumerate(analysis['decisions'], 1):
+            memo_parts.append(f"{i}. {decision}")
+    
+    # Key points
+    if analysis['key_points']:
+        memo_parts.append(f"\n🔑 KEY POINTS")
+        for i, point in enumerate(analysis['key_points'], 1):
+            memo_parts.append(f"{i}. {point}")
+    
+    # Action items
+    if analysis['action_items']:
+        memo_parts.append(f"\n📝 ACTION ITEMS")
+        for i, action in enumerate(analysis['action_items'], 1):
+            memo_parts.append(f"{i}. {action}")
+    
+    # If no structured content found, provide a general summary
+    if not any([analysis['problems'], analysis['solutions'], analysis['decisions'], analysis['key_points'], analysis['action_items']]):
+        memo_parts.append(f"\n📄 GENERAL SUMMARY")
+        # Take first few sentences as general summary
+        general_summary = sentences[:min(5, len(sentences))]
+        for i, sentence in enumerate(general_summary, 1):
+            memo_parts.append(f"{i}. {sentence}")
+    
+    memo_parts.append(f"\n" + "=" * 50)
+    memo_parts.append("Generated by Meeting Whisperer")
+    
+    return "\n".join(memo_parts)
