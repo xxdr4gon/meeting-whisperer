@@ -99,6 +99,7 @@ def process_video_task(self, video_path: str, job_id: str, user_email: str | Non
             send_transcript_email(user_email, job_id, txt_path.read_text(encoding="utf-8"))
         _update_progress(self, "done", 100)
         _log(job_id, "Job complete")
+        _log(job_id, f"Final progress: stage=done, percent=100")
         return {"status": "ok", "job_id": job_id}
     finally:
         try:

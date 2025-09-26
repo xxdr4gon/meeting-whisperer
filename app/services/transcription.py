@@ -74,11 +74,14 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
                 raise e
         else:
             print(f"Using pre-downloaded Estonian model from {local_dir}")
-            # Verify the model files exist
-            required_files = ["config.json", "tokenizer.json", "preprocessor_config.json"]
+            # Verify the model files exist (Estonian model uses vocab.json + merges.txt instead of tokenizer.json)
+            required_files = ["config.json", "preprocessor_config.json", "pytorch_model.bin"]
+            tokenizer_files = ["vocab.json", "merges.txt"]  # Estonian model uses these instead of tokenizer.json
             missing_files = [f for f in required_files if not os.path.exists(os.path.join(local_dir, f))]
-            if missing_files:
-                print(f"Missing required files: {missing_files}")
+            missing_tokenizer = [f for f in tokenizer_files if not os.path.exists(os.path.join(local_dir, f))]
+            
+            if missing_files or missing_tokenizer:
+                print(f"Missing required files: {missing_files + missing_tokenizer}")
                 print("Re-downloading model...")
                 local_dir = snapshot_download(
                     repo_id=model_name,

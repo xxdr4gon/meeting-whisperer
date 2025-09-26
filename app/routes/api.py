@@ -134,16 +134,16 @@ async def export_transcript(job_id: str, format: str = "pdf", user=Depends(get_c
 	data = json.loads(json_path.read_text(encoding="utf-8"))
 	
 	if format == "pdf":
-		return await _export_pdf(data, job_id)
+		return _export_pdf(data, job_id)
 	elif format == "docx":
-		return await _export_docx(data, job_id)
+		return _export_docx(data, job_id)
 	elif format == "pptx":
-		return await _export_pptx(data, job_id)
+		return _export_pptx(data, job_id)
 	else:
 		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported export format")
 
 
-async def _export_pdf(data, job_id):
+def _export_pdf(data, job_id):
 	"""Export transcript as PDF"""
 	try:
 		from reportlab.lib.pagesizes import letter, A4
@@ -197,7 +197,7 @@ async def _export_pdf(data, job_id):
 		raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="PDF export not available - missing reportlab")
 
 
-async def _export_docx(data, job_id):
+def _export_docx(data, job_id):
 	"""Export transcript as DOCX"""
 	try:
 		from docx import Document
@@ -239,7 +239,7 @@ async def _export_docx(data, job_id):
 		raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DOCX export not available - missing python-docx")
 
 
-async def _export_pptx(data, job_id):
+def _export_pptx(data, job_id):
 	"""Export transcript as PPTX"""
 	try:
 		from pptx import Presentation
