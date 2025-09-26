@@ -74,19 +74,19 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
                 raise e
         else:
             print(f"Using pre-downloaded Estonian model from {local_dir}")
-            # Verify the model files exist (Estonian model uses vocab.json + merges.txt instead of tokenizer.json)
-            required_files = ["config.json", "preprocessor_config.json", "pytorch_model.bin"]
-            tokenizer_files = ["vocab.json", "merges.txt"]  # Estonian model uses these instead of tokenizer.json
-            missing_files = [f for f in required_files if not os.path.exists(os.path.join(local_dir, f))]
-            missing_tokenizer = [f for f in tokenizer_files if not os.path.exists(os.path.join(local_dir, f))]
-            
-            if missing_files or missing_tokenizer:
-                print(f"Missing required files: {missing_files + missing_tokenizer}")
-                print("Re-downloading model...")
-                local_dir = snapshot_download(
-                    repo_id=model_name,
-                    local_dir=local_dir,
-                )
+        # Verify the model files exist (Estonian model uses vocab.json + merges.txt instead of tokenizer.json)
+        required_files = ["config.json", "preprocessor_config.json", "pytorch_model.bin"]
+        tokenizer_files = ["vocab.json", "merges.txt", "tokenizer_config.json"]  # Estonian model uses BPE tokenizer
+        missing_files = [f for f in required_files if not os.path.exists(os.path.join(local_dir, f))]
+        missing_tokenizer = [f for f in tokenizer_files if not os.path.exists(os.path.join(local_dir, f))]
+        
+        if missing_files or missing_tokenizer:
+            print(f"Missing required files: {missing_files + missing_tokenizer}")
+            print("Re-downloading model...")
+            local_dir = snapshot_download(
+                repo_id=model_name,
+                local_dir=local_dir,
+            )
             
         device_index = 0 if use_gpu else -1
         print("Initializing HF ASR pipeline...")
@@ -97,26 +97,32 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
         
         print("Loading Whisper model and processor...")
         try:
+            # Try loading from local directory first
             model = WhisperForConditionalGeneration.from_pretrained(
                 local_dir,
                 torch_dtype=torch.float32,
                 low_cpu_mem_usage=True
             )
             processor = WhisperProcessor.from_pretrained(local_dir)
+            print("✅ Loaded model and processor from local directory")
         except Exception as e:
             print(f"Failed to load from local directory: {e}")
             print("Downloading model directly from Hugging Face...")
-            # Download directly from Hugging Face as fallback
-            model = WhisperForConditionalGeneration.from_pretrained(
-                model_name,
-                torch_dtype=torch.float32,
-                low_cpu_mem_usage=True
-            )
-            processor = WhisperProcessor.from_pretrained(model_name)
-            # Save to local directory for future use
-            model.save_pretrained(local_dir)
-            processor.save_pretrained(local_dir)
-            print(f"Model saved to {local_dir}")
+            try:
+                # Download directly from Hugging Face as fallback
+                model = WhisperForConditionalGeneration.from_pretrained(
+                    model_name,
+                    torch_dtype=torch.float32,
+                    low_cpu_mem_usage=True
+                )
+                processor = WhisperProcessor.from_pretrained(model_name)
+                # Save to local directory for future use
+                model.save_pretrained(local_dir)
+                processor.save_pretrained(local_dir)
+                print(f"✅ Model downloaded and saved to {local_dir}")
+            except Exception as e2:
+                print(f"❌ Failed to download model: {e2}")
+                raise e2
         
         # Create pipeline with explicit model and processor
         _ET_ASR = hf_pipeline(

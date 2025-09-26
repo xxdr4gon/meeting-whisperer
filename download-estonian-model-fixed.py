@@ -30,14 +30,18 @@ def download_estonian_model():
         print(f"✅ Model downloaded successfully to {local_dir}")
         print(f"📁 Contents: {os.listdir(local_dir)}")
         
-        # Verify required files exist
-        required_files = ["config.json", "pytorch_model.bin", "tokenizer.json", "preprocessor_config.json"]
-        missing_files = [f for f in required_files if not os.path.exists(os.path.join(local_dir, f))]
+        # Verify required files exist (Estonian model uses BPE tokenizer)
+        required_files = ["config.json", "pytorch_model.bin", "preprocessor_config.json"]
+        tokenizer_files = ["vocab.json", "merges.txt", "tokenizer_config.json"]
+        all_required = required_files + tokenizer_files
+        
+        missing_files = [f for f in all_required if not os.path.exists(os.path.join(local_dir, f))]
         
         if missing_files:
             print(f"⚠️  Missing files: {missing_files}")
         else:
             print("✅ All required files present")
+            print(f"📄 Model files: {[f for f in os.listdir(local_dir) if f.endswith('.json') or f.endswith('.bin') or f.endswith('.txt')]}")
         
     except Exception as e:
         print(f"❌ Error downloading model: {e}")
