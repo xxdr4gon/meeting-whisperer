@@ -8,13 +8,16 @@
 </head>
 <body class="min-h-screen bg-gray-50">
 	<header class="bg-white shadow">
-		<div class="mx-auto max-w-7xl px-4 py-4 flex justify-between items-center">
-			<h1 class="text-xl font-semibold text-gray-800">Transcription Dashboard</h1>
-			<button id="logout" class="text-sm text-gray-600 hover:text-gray-900">Logout</button>
-		</div>
+        <div class="mx-auto max-w-7xl px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-semibold text-gray-800">Transcription Dashboard</h1>
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-gray-600" id="username"></span>
+                <button id="logout" class="text-sm text-gray-600 hover:text-gray-900">Logout</button>
+            </div>
+        </div>
 	</header>
 	<main class="mx-auto max-w-3xl p-4">
-		<section class="bg-white shadow rounded-lg p-6 mt-6">
+        <section class="bg-white shadow rounded-lg p-6 mt-6">
 			<h2 class="text-lg font-medium text-gray-800 mb-4">Upload Video</h2>
 			<form id="upload-form" class="space-y-4">
 				<input id="video" type="file" accept="video/*" class="block w-full" required />
@@ -27,14 +30,25 @@
 			<p id="upload-status" class="text-sm text-gray-600 mt-2"></p>
 		</section>
 
-		<section class="bg-white shadow rounded-lg p-6 mt-6">
+        <section class="bg-white shadow rounded-lg p-6 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
 			<h2 class="text-lg font-medium text-gray-800 mb-4">Recent Jobs</h2>
-			<ul id="jobs" class="space-y-4 text-sm text-gray-700"></ul>
+            <div class="lg:col-span-2">
+                <ul id="jobs" class="space-y-4 text-sm text-gray-700"></ul>
+            </div>
+            <div class="lg:col-span-1">
+                <h3 class="text-sm font-medium text-gray-700 mb-2">Live logs</h3>
+                <pre id="live-logs" class="h-64 overflow-auto bg-gray-100 p-3 rounded text-xs text-gray-800"></pre>
+            </div>
 		</section>
 	</main>
 	<script>
-	const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token');
 	if (!token) { window.location.href = '/login'; }
+    // decode username from token (HS256 local token has email/name)
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        document.getElementById('username').textContent = payload.name || payload.email || '';
+    } catch {}
 
 	document.getElementById('logout').addEventListener('click', () => {
 		localStorage.removeItem('token');
@@ -83,7 +97,7 @@
 		</div>`;
 	}
 
-	function addJob(jobId) {
+    function addJob(jobId) {
 		const li = document.createElement('li');
 		li.dataset.jobId = jobId;
 		li.className = 'border rounded p-4';
@@ -98,7 +112,8 @@
 		</div>
 		<div class="mt-3">${progressBar(jobId)}</div>`;
 		jobsEl.prepend(li);
-		poll(jobId);
+        poll(jobId);
+        pollLogs(jobId);
 	}
 
 	async function poll(jobId) {
@@ -120,6 +135,19 @@
 				su.style.width = '100%';
 				done = true;
 			}
+		}
+	}
+
+	async function pollLogs(jobId) {
+		const logsEl = document.getElementById('live-logs');
+		let stop = false;
+		while (!stop) {
+			await new Promise(r => setTimeout(r, 2000));
+			const res = await fetch('/api/logs/' + jobId, { headers: { 'Authorization': 'Bearer ' + token } });
+			if (!res.ok) break;
+			const text = await res.text();
+			logsEl.textContent = text;
+			logsEl.scrollTop = logsEl.scrollHeight;
 		}
 	}
 

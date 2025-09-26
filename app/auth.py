@@ -33,12 +33,13 @@ _jwks_cache = JWKSCache(ttl_seconds=settings.oidc_jwks_cache_ttl)
 
 
 async def _get_openid_config() -> Dict[str, Any]:
-	if not settings.oidc_discovery_url:
-		raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OIDC discovery not configured")
-	async with httpx.AsyncClient(timeout=10.0) as client:
-		resp = await client.get(settings.oidc_discovery_url)
-		resp.raise_for_status()
-		return resp.json()
+    # If OIDC is not configured, return empty config instead of 503
+    if not settings.oidc_discovery_url:
+        return {}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(settings.oidc_discovery_url)
+        resp.raise_for_status()
+        return resp.json()
 
 
 def _find_key(jwks: Dict[str, Any], kid: str) -> Optional[Dict[str, Any]]:
@@ -94,10 +95,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(b
 	if settings.local_admin_enabled and local_user:
 		return local_user
 
-	cfg = await _get_openid_config()
-	jwks_uri = cfg.get("jwks_uri")
-	if not jwks_uri:
-		raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="JWKS URI not available")
+    cfg = await _get_openid_config()
+    jwks_uri = cfg.get("jwks_uri")
+    if not jwks_uri:
+        # No IdP configured; reject with 401 instead of 503 to avoid false service errors
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No IdP configured and local token not provided")
 	unverified = jwt.get_unverified_header(token)
 	kid = unverified.get("kid")
 	if not kid:

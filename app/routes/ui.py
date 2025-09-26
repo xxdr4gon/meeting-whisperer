@@ -1,5 +1,5 @@
 from pathlib import Path
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.templating import Jinja2Templates
 
@@ -16,6 +16,11 @@ async def login_page(request: Request):
 	return templates.TemplateResponse("login.html", {"request": request})
 
 
+from ..auth import get_current_user
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
-	return templates.TemplateResponse("dashboard.html", {"request": request})
+    # Check if user is authenticated by looking for token in cookies or redirect to login
+    # The frontend will handle the actual authentication via localStorage
+    return templates.TemplateResponse("dashboard.html", {"request": request})

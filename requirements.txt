@@ -19,3 +19,6 @@ faster-whisper==1.0.3
 python-dotenv==1.0.1
 reportlab==4.2.5
 openai-whisper==20231117
+transformers>=4.40.0
+torch>=2.0.0,<2.4.0
+librosa==0.10.2

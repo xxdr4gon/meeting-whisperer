@@ -59,6 +59,10 @@ class Settings(BaseSettings):
 	enable_gpu: bool = Field(default=False, alias="ENABLE_GPU")
 	gpu_backend: str | None = Field(default=None, alias="GPU_BACKEND")
 	gpu_device_id: int = Field(default=0, alias="GPU_DEVICE_ID")
+	
+	# Estonian models from TalTechNLP
+	use_estonian_model: bool = Field(default=True, alias="USE_ESTONIAN_MODEL")  # Enable by default
+	estonian_model: str = Field(default="TalTechNLP/whisper-large-v3-turbo-et-verbatim", alias="ESTONIAN_MODEL")
 
 	# Pyannote diarization
 	pyannote_auth_token: str | None = Field(default=None, alias="PYANNOTE_AUTH_TOKEN")

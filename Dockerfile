@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopenblas0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install compiled whisper.cpp binary under standard name
+# Install compiled whisper.cpp binary
 COPY --from=whisper_builder /out/whisper-cli /usr/local/bin/whisper-cli
 RUN chmod +x /usr/local/bin/whisper-cli
 
@@ -47,6 +47,9 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Create models directory (model will be downloaded on first use)
+RUN mkdir -p /models/hf_et_model
 
 COPY . .
 
