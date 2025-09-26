@@ -90,15 +90,44 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
             
         device_index = 0 if use_gpu else -1
         print("Initializing HF ASR pipeline...")
+        
+        # Load model and processor explicitly as Whisper classes
+        from transformers import WhisperForConditionalGeneration, WhisperProcessor
+        import torch
+        
+        print("Loading Whisper model and processor...")
+        try:
+            model = WhisperForConditionalGeneration.from_pretrained(
+                local_dir,
+                torch_dtype=torch.float32,
+                low_cpu_mem_usage=True
+            )
+            processor = WhisperProcessor.from_pretrained(local_dir)
+        except Exception as e:
+            print(f"Failed to load from local directory: {e}")
+            print("Downloading model directly from Hugging Face...")
+            # Download directly from Hugging Face as fallback
+            model = WhisperForConditionalGeneration.from_pretrained(
+                model_name,
+                torch_dtype=torch.float32,
+                low_cpu_mem_usage=True
+            )
+            processor = WhisperProcessor.from_pretrained(model_name)
+            # Save to local directory for future use
+            model.save_pretrained(local_dir)
+            processor.save_pretrained(local_dir)
+            print(f"Model saved to {local_dir}")
+        
+        # Create pipeline with explicit model and processor
         _ET_ASR = hf_pipeline(
             task="automatic-speech-recognition",
-            model=local_dir,
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
             chunk_length_s=60,
             stride_length_s=10,
             device=device_index,
             return_timestamps=True,
-            ignore_warning=True,
-            use_safetensors=True,  # Use safetensors to avoid torch.load vulnerability
             generate_kwargs={
                 "language": "et",
                 "task": "transcribe",
