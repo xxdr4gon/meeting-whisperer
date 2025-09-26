@@ -63,12 +63,27 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
         local_dir = "/models/hf_et_model"
         if not os.path.exists(local_dir) or not os.listdir(local_dir):
             print("Preparing Estonian model snapshot...")
-            local_dir = snapshot_download(
-                repo_id=model_name,
-                local_dir=local_dir,
-            )
+            try:
+                local_dir = snapshot_download(
+                    repo_id=model_name,
+                    local_dir=local_dir,
+                )
+                print(f"Model downloaded to {local_dir}")
+            except Exception as e:
+                print(f"Failed to download Estonian model: {e}")
+                raise e
         else:
             print(f"Using pre-downloaded Estonian model from {local_dir}")
+            # Verify the model files exist
+            required_files = ["config.json", "tokenizer.json", "preprocessor_config.json"]
+            missing_files = [f for f in required_files if not os.path.exists(os.path.join(local_dir, f))]
+            if missing_files:
+                print(f"Missing required files: {missing_files}")
+                print("Re-downloading model...")
+                local_dir = snapshot_download(
+                    repo_id=model_name,
+                    local_dir=local_dir,
+                )
             
         device_index = 0 if use_gpu else -1
         print("Initializing HF ASR pipeline...")
