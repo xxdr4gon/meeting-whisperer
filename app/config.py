@@ -67,9 +67,9 @@ class Settings(BaseSettings):
 	# English ASR models (faster-whisper)
 	english_asr_dir: str = Field(default="/models/english-asr", alias="ENGLISH_ASR_DIR")
 	
-	# AI Summarization models from TartuNLP
-	use_ai_summarization: bool = Field(default=True, alias="USE_AI_SUMMARIZATION")
-	ai_summarization_model: str = Field(default="llama", alias="AI_SUMMARIZATION_MODEL")
+	# AI Summarization models
+	use_ai_summarization: bool = Field(default=True, alias="USE_AI_SUMMARIZATION")  # Disabled by default due to model size issues
+	ai_summarization_model: str = Field(default="qwen", alias="AI_SUMMARIZATION_MODEL")  # qwen (3B) or llama (8B)
 	summarization_dir: str = Field(default="/models/summarization", alias="SUMMARIZATION_DIR")
 	
 	# Grammar Correction

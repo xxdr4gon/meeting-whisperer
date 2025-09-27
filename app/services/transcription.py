@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict
 
 from ..config import settings
+from .technical_terms import _get_technical_terms_prompt, _apply_technical_corrections
 
 
 WHISPER_CPP_BIN = "whisper"  # Use Python whisper CLI instead
@@ -446,6 +447,9 @@ def _run_faster_whisper(audio_path: str) -> Dict:
 	# Use cached model for speed
 	model = _get_faster_whisper_model(settings.enable_gpu)
 	
+	# Technical terms prompt for better accuracy
+	technical_prompt = _get_technical_terms_prompt()
+	
 	# Optimize transcription settings for speed
 	segments, info = model.transcribe(
 		audio_path,
@@ -461,7 +465,7 @@ def _run_faster_whisper(audio_path: str) -> Dict:
 		no_speech_threshold=0.6,
 		condition_on_previous_text=False,  # Disable for speed
 		prompt_reset_on_temperature=0.5,
-		initial_prompt=None,
+		initial_prompt=technical_prompt,  # Add technical context
 		prefix=None,
 		suppress_blank=True,
 		suppress_tokens=[-1],
@@ -477,7 +481,9 @@ def _run_faster_whisper(audio_path: str) -> Dict:
 	
 	out_segments = []
 	for s in segments:
-		out_segments.append({"start": s.start, "end": s.end, "text": s.text.strip()})
+		# Apply technical terms post-processing
+		corrected_text = _apply_technical_corrections(s.text.strip())
+		out_segments.append({"start": s.start, "end": s.end, "text": corrected_text})
 	return {"segments": out_segments, "language": info.language}
 
 

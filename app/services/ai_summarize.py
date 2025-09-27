@@ -48,23 +48,16 @@ def _get_estonian_summarizer():
             model_name = "tartuNLP/llama-estllm-protype-0825"
             local_model_path = f"{summarization_dir}/llama"
         else:  # qwen
-            model_name = "tartuNLP/Qwen2.5-3B-Instruct-hsb-dsb"
+            model_name = "Qwen/Qwen2.5-3B-Instruct"  # Use general multilingual model, not Sorbian-specific
             local_model_path = f"{summarization_dir}/qwen"
         
-        # Check if the selected model exists, if not try the other one
+        # Verify model exists (no fallback since model will always be available)
         if not os.path.exists(local_model_path) or not os.listdir(local_model_path):
-            print(f"Selected model not found at {local_model_path}, trying alternative...")
-            if model_type == "llama":
-                # Try qwen instead
-                model_name = "tartuNLP/Qwen2.5-3B-Instruct-hsb-dsb"
-                local_model_path = f"{summarization_dir}/qwen"
-                model_type = "qwen"
-            else:
-                # Try llama instead
-                model_name = "tartuNLP/llama-estllm-protype-0825"
-                local_model_path = f"{summarization_dir}/llama"
-                model_type = "llama"
-            print(f"Switched to {model_type} model: {local_model_path}")
+            print(f"Model not found at {local_model_path}")
+            print("Please run: python download-all-models.py")
+            _ESTONIAN_SUMMARIZER = None
+            _ESTONIAN_TOKENIZER = None
+            return None, None
         
         print(f"Model name: {model_name}")
         print(f"Local model path: {local_model_path}")
