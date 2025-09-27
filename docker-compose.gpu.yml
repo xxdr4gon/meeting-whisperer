@@ -1,0 +1,71 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  
+  app:
+    build:
+      context: .
+      target: app
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    environment:
+      - APP_PORT=${APP_PORT:-8080}
+      - APP_HOST=${APP_HOST:-0.0.0.0}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - BROKER_URL=${BROKER_URL:-redis://redis:6379/1}
+      - RESULT_BACKEND=${RESULT_BACKEND:-redis://redis:6379/2}
+      - UPLOAD_DIR=${UPLOAD_DIR:-/data/uploads}
+      - TRANSCRIPT_DIR=${TRANSCRIPT_DIR:-/data/transcripts}
+      - MODEL_PATH=${MODEL_PATH:-/models/ggml-base.bin}
+      - ENABLE_GPU=${ENABLE_GPU:-true}
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256,expandable_segments:True
+      - TOKENIZERS_PARALLELISM=false
+      - OMP_NUM_THREADS=4
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+      - ./models:/models
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  
+  worker:
+    build:
+      context: .
+      target: worker
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - BROKER_URL=${BROKER_URL:-redis://redis:6379/1}
+      - RESULT_BACKEND=${RESULT_BACKEND:-redis://redis:6379/2}
+      - UPLOAD_DIR=${UPLOAD_DIR:-/data/uploads}
+      - TRANSCRIPT_DIR=${TRANSCRIPT_DIR:-/data/transcripts}
+      - MODEL_PATH=${MODEL_PATH:-/models/ggml-base.bin}
+      - ENABLE_GPU=${ENABLE_GPU:-true}
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256,expandable_segments:True
+      - TOKENIZERS_PARALLELISM=false
+      - OMP_NUM_THREADS=4
+    volumes:
+      - ./data:/data
+      - ./models:/models
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

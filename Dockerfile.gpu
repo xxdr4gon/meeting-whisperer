@@ -1,0 +1,45 @@
+# syntax=docker/dockerfile:1
+
+# Use NVIDIA CUDA base image for GPU support
+FROM nvidia/cuda:12.6.1-devel-ubuntu22.04 AS base
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-dev python3-pip python3.11-venv \
+    git build-essential cmake libopenblas-dev curl ca-certificates \
+    libsndfile1 ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+# Install PyTorch with CUDA support (latest stable versions)
+RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Install other ML dependencies
+RUN pip install --no-cache-dir --no-deps "transformers>=4.40.0,<5.0.0" "accelerate>=0.20.0"
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Set environment variables for GPU (optimized for RTX 2080 8GB)
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256,expandable_segments:True
+ENV TOKENIZERS_PARALLELISM=false
+ENV PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+ENV OMP_NUM_THREADS=4
+
+# Verify GPU installation
+RUN python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}'); print(f'GPU count: {torch.cuda.device_count()}')"
+
+# App stage
+FROM base AS app
+WORKDIR /app
+COPY app/ ./app/
+EXPOSE 8080
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+# Worker stage  
+FROM base AS worker
+WORKDIR /app
+COPY app/ ./app/
+CMD ["python", "-m", "celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
