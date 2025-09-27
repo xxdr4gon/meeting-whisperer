@@ -168,7 +168,7 @@ async def get_transcript(job_id: str, format: Optional[str] = "json", user=Depen
 
 @router.get("/export/{job_id}")
 async def export_transcript(job_id: str, format: str = "pdf", user=Depends(get_current_user)):
-	"""Export transcript in various formats: pdf, docx, pptx"""
+	"""Export transcript in various formats: pdf, docx"""
 	transcript_dir = Path(settings.transcript_dir)
 	json_path = transcript_dir / f"{job_id}.json"
 	
@@ -181,8 +181,6 @@ async def export_transcript(job_id: str, format: str = "pdf", user=Depends(get_c
 		return _export_pdf(data, job_id)
 	elif format == "docx":
 		return _export_docx(data, job_id)
-	elif format == "pptx":
-		return _export_pptx(data, job_id)
 	else:
 		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported export format")
 
@@ -285,66 +283,6 @@ def _export_docx(data, job_id):
 		raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DOCX export not available - missing python-docx")
 
 
-def _export_pptx(data, job_id):
-	"""Export transcript as PPTX"""
-	try:
-		from pptx import Presentation
-		from pptx.util import Inches, Pt
-		from io import BytesIO
-		
-		prs = Presentation()
-		
-		# Title slide
-		title_slide_layout = prs.slide_layouts[0]
-		slide = prs.slides.add_slide(title_slide_layout)
-		title = slide.shapes.title
-		subtitle = slide.placeholders[1]
-		title.text = f"Meeting Transcript"
-		subtitle.text = f"Job ID: {job_id}"
-		
-		# Summary slide
-		if 'summary' in data and data['summary']:
-			summary_slide = prs.slides.add_slide(prs.slide_layouts[1])
-			summary_slide.shapes.title.text = "Summary"
-			summary_slide.placeholders[1].text = data['summary']
-		
-		# Transcript slides (group segments)
-		segments = data.get('segments', [])
-		segments_per_slide = 5
-		
-		for i in range(0, len(segments), segments_per_slide):
-			slide = prs.slides.add_slide(prs.slide_layouts[1])
-			slide.shapes.title.text = f"Transcript (Part {i//segments_per_slide + 1})"
-			
-			textbox = slide.placeholders[1]
-			text_frame = textbox.text_frame
-			text_frame.clear()
-			
-			for segment in segments[i:i+segments_per_slide]:
-				start_time = segment.get('start', 0)
-				end_time = segment.get('end', 0)
-				text = segment.get('text', '')
-				speaker = segment.get('speaker', 'Unknown')
-				
-				time_str = f"[{start_time:.1f}s - {end_time:.1f}s]"
-				speaker_str = f"{speaker}:" if speaker != 'Unknown' else ""
-				
-				p = text_frame.add_paragraph()
-				p.text = f"{time_str} {speaker_str} {text}"
-				p.font.size = Pt(12)
-		
-		buffer = BytesIO()
-		prs.save(buffer)
-		buffer.seek(0)
-		
-		return FileResponse(
-			path=buffer,
-			filename=f"transcript_{job_id}.pptx",
-			media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-			background=None
-		)
-	except ImportError:
-		raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="PPTX export not available - missing python-pptx")
 
 
 @router.put("/transcript/{job_id}/speakers")
@@ -555,16 +493,15 @@ async def clear_all_transcripts(user=Depends(get_current_user)):
 	summary_files = list(transcript_dir.glob("*.summary.txt"))
 	pdf_files = list(transcript_dir.glob("*.pdf"))
 	docx_files = list(transcript_dir.glob("*.docx"))
-	pptx_files = list(transcript_dir.glob("*.pptx"))
 	
-	total_files = len(json_files) + len(txt_files) + len(summary_files) + len(pdf_files) + len(docx_files) + len(pptx_files)
+	total_files = len(json_files) + len(txt_files) + len(summary_files) + len(pdf_files) + len(docx_files)
 	
 	if total_files == 0:
 		return {"message": "No transcripts found to delete", "deleted_count": 0}
 	
 	# Delete all transcript files
 	deleted_count = 0
-	for file_list in [json_files, txt_files, summary_files, pdf_files, docx_files, pptx_files]:
+	for file_list in [json_files, txt_files, summary_files, pdf_files, docx_files]:
 		for file_path in file_list:
 			try:
 				file_path.unlink()

@@ -82,18 +82,36 @@ def _load_grammar_dataset() -> Optional[Dict]:
             return None
 
 def _find_similar_errors(text: str, dataset: Dict, threshold: float = 0.7) -> List[Tuple[str, str, float]]:
-    """Find similar error patterns in the dataset"""
+    """Find similar error patterns in the dataset - optimized for speed"""
     similar_corrections = []
     
     original_strings = dataset.get('original_string', [])
     correct_strings = dataset.get('correct_string', [])
     
-    for orig, corr in zip(original_strings, correct_strings):
-        # Calculate similarity
-        similarity = SequenceMatcher(None, text.lower(), orig.lower()).ratio()
+    # Split text into words for faster matching
+    text_words = set(text.lower().split())
+    
+    # Limit search to first 1000 entries for speed
+    max_entries = min(1000, len(original_strings))
+    
+    for i in range(max_entries):
+        orig = original_strings[i]
+        corr = correct_strings[i]
         
-        if similarity >= threshold:
-            similar_corrections.append((orig, corr, similarity))
+        # Quick word overlap check first
+        orig_words = set(orig.lower().split())
+        word_overlap = len(text_words.intersection(orig_words)) / max(len(text_words), len(orig_words))
+        
+        if word_overlap > 0.3:  # Only do expensive similarity if there's word overlap
+            # Calculate similarity only for promising candidates
+            similarity = SequenceMatcher(None, text.lower(), orig.lower()).ratio()
+            
+            if similarity >= threshold:
+                similar_corrections.append((orig, corr, similarity))
+                
+                # Early termination if we have enough good matches
+                if len(similar_corrections) >= 10:
+                    break
     
     # Sort by similarity (highest first)
     similar_corrections.sort(key=lambda x: x[2], reverse=True)
@@ -167,7 +185,8 @@ def correct_estonian_grammar(text: str, use_ai_correction: bool = True) -> Dict[
     confidence = 0.6  # Rule-based corrections have moderate confidence
     
     # Apply AI-based corrections if enabled and dataset is available
-    if use_ai_correction:
+    # Skip AI correction for very long texts to maintain speed
+    if use_ai_correction and len(text) < 1000:
         dataset = _load_grammar_dataset()
         if dataset:
             print("Applying AI-based grammar corrections...")

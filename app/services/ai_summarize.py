@@ -41,6 +41,8 @@ def _get_estonian_summarizer():
         
         print(f"AI Summarization model type: {model_type}")
         print(f"Summarization directory: {summarization_dir}")
+        print(f"Settings object: {settings}")
+        print(f"AI_SUMMARIZATION_MODEL env var: {os.environ.get('AI_SUMMARIZATION_MODEL', 'Not set')}")
         
         if model_type == "llama":
             model_name = "tartuNLP/llama-estllm-protype-0825"
@@ -48,6 +50,21 @@ def _get_estonian_summarizer():
         else:  # qwen
             model_name = "tartuNLP/Qwen2.5-3B-Instruct-hsb-dsb"
             local_model_path = f"{summarization_dir}/qwen"
+        
+        # Check if the selected model exists, if not try the other one
+        if not os.path.exists(local_model_path) or not os.listdir(local_model_path):
+            print(f"Selected model not found at {local_model_path}, trying alternative...")
+            if model_type == "llama":
+                # Try qwen instead
+                model_name = "tartuNLP/Qwen2.5-3B-Instruct-hsb-dsb"
+                local_model_path = f"{summarization_dir}/qwen"
+                model_type = "qwen"
+            else:
+                # Try llama instead
+                model_name = "tartuNLP/llama-estllm-protype-0825"
+                local_model_path = f"{summarization_dir}/llama"
+                model_type = "llama"
+            print(f"Switched to {model_type} model: {local_model_path}")
         
         print(f"Model name: {model_name}")
         print(f"Local model path: {local_model_path}")

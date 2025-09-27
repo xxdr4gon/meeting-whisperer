@@ -289,7 +289,7 @@ def _get_faster_whisper_model(use_gpu: bool):
             from accelerate import init_empty_weights, load_checkpoint_and_dispatch
             
             _FASTER_WHISPER_MODEL = WhisperModel(
-                "tiny", 
+                "base",  # Changed from "tiny" to "base" for better accuracy
                 device=device, 
                 compute_type=compute_type,
                 download_root="/models/english-asr",
@@ -300,7 +300,7 @@ def _get_faster_whisper_model(use_gpu: bool):
         except Exception as e:
             print(f"Failed to load with accelerate: {e}")
             # Fallback to standard loading
-            _FASTER_WHISPER_MODEL = WhisperModel("tiny", device=device, compute_type=compute_type)
+            _FASTER_WHISPER_MODEL = WhisperModel("base", device=device, compute_type=compute_type)
             print("Faster-whisper model loaded (standard)")
         
         return _FASTER_WHISPER_MODEL
