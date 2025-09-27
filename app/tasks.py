@@ -12,6 +12,7 @@ from .services.transcription import transcribe_audio
 from .services.diarization import diarize_speakers
 from .services.emailer import send_transcript_email
 from .services.summarize import summarize_text
+from .services.ai_summarize import create_ai_meeting_summary
 
 
 def _extract_audio(video_path: str) -> str:
@@ -57,6 +58,17 @@ def _log(job_id: str, message: str):
 def process_video_task(self, video_path: str, job_id: str, user_email: str | None) -> dict:
     transcript_dir = Path(settings.transcript_dir)
     transcript_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Extract original filename from video_path (remove job_id prefix)
+    video_path_obj = Path(video_path)
+    original_filename = video_path_obj.name
+    if '_' in original_filename:
+        # Remove job_id prefix: "uuid_filename.ext" -> "filename.ext"
+        original_filename = '_'.join(original_filename.split('_')[1:])
+    
+    # Use original filename for transcript files
+    base_name = Path(original_filename).stem  # Remove extension
+    
     # seed job_id in meta for persistence
     setattr(self, "_progress_meta", {"job_id": job_id})
     _update_progress(self, "extract", 5)
@@ -69,11 +81,42 @@ def process_video_task(self, video_path: str, job_id: str, user_email: str | Non
         _update_progress(self, "diarize", 60)
         _log(job_id, "Running diarization")
         diar = diarize_speakers(audio_path)
-        # Merge diarization speakers into transcript segments when possible (simple placeholder)
+        # Merge diarization speakers into transcript segments
+        speaker_segments = diar.get("speakers", [])
+        for segment in transcript.get("segments", []):
+            segment_start = segment.get("start", 0)
+            segment_end = segment.get("end", 0)
+            # Find the speaker that overlaps most with this segment
+            best_speaker = None
+            best_overlap = 0
+            for spk_seg in speaker_segments:
+                spk_start = spk_seg.get("start", 0)
+                spk_end = spk_seg.get("end", 0)
+                # Calculate overlap
+                overlap_start = max(segment_start, spk_start)
+                overlap_end = min(segment_end, spk_end)
+                if overlap_start < overlap_end:
+                    overlap_duration = overlap_end - overlap_start
+                    if overlap_duration > best_overlap:
+                        best_overlap = overlap_duration
+                        best_speaker = spk_seg.get("speaker", "Speaker")
+            if best_speaker:
+                segment["speaker"] = best_speaker
         _update_progress(self, "summarize", 80)
         _log(job_id, "Summarizing transcript")
         plain_text = "\n".join(seg.get("text", "") for seg in transcript.get("segments", []))
-        summary = summarize_text(plain_text, max_sentences=7)
+        
+        # Use AI summarization if enabled, otherwise fallback to rule-based
+        if settings.use_ai_summarization:
+            try:
+                detected_language = transcript.get("language", "et")
+                summary = create_ai_meeting_summary(plain_text, detected_language)
+                _log(job_id, "AI summarization completed")
+            except Exception as e:
+                _log(job_id, f"AI summarization failed: {e}, using fallback")
+                summary = summarize_text(plain_text, max_sentences=7)
+        else:
+            summary = summarize_text(plain_text, max_sentences=7)
         result = {
             "job_id": job_id,
             "segments": transcript.get("segments", []),
@@ -81,9 +124,9 @@ def process_video_task(self, video_path: str, job_id: str, user_email: str | Non
             "speakers": diar.get("speakers", []),
             "summary": summary,
         }
-        json_path = transcript_dir / f"{job_id}.json"
-        txt_path = transcript_dir / f"{job_id}.txt"
-        sum_path = transcript_dir / f"{job_id}.summary.txt"
+        json_path = transcript_dir / f"{base_name}.json"
+        txt_path = transcript_dir / f"{base_name}.txt"
+        sum_path = transcript_dir / f"{base_name}.summary.txt"
         json_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         # Simple TXT join
         lines = []

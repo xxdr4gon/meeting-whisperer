@@ -1,0 +1,68 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+README*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Data directories (will be mounted as volumes)
+data/
+models/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Test files
+test_*
+*_test.py
+tests/
+
+# Scripts
+*.bat
+*.sh
+*.py
+!app/
+!templates/
+!requirements.txt

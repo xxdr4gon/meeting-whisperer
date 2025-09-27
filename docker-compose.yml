@@ -1,11 +1,14 @@
-version: "3.9"
 services:
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
   app:
-    build: .
+    build:
+      context: .
+      target: app
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     environment:
       - APP_PORT=${APP_PORT:-8080}
       - APP_HOST=${APP_HOST:-0.0.0.0}
@@ -19,7 +22,10 @@ services:
       - GPU_BACKEND=${GPU_BACKEND:-}
       - GPU_DEVICE_ID=${GPU_DEVICE_ID:-0}
       - USE_ESTONIAN_MODEL=${USE_ESTONIAN_MODEL:-true}
-      - ESTONIAN_MODEL=${ESTONIAN_MODEL:-TalTechNLP/whisper-large-v3-turbo-et-verbatim}
+      - ESTONIAN_MODEL=${ESTONIAN_MODEL:-/models/estonian-model}
+      - USE_AI_SUMMARIZATION=${USE_AI_SUMMARIZATION:-true}
+      - AI_SUMMARIZATION_MODEL=${AI_SUMMARIZATION_MODEL:-qwen}
+      - AI_MODELS_DIR=${AI_MODELS_DIR:-/models/estonian-ai}
       - LOCAL_ADMIN_ENABLED=${LOCAL_ADMIN_ENABLED:-true}
       - LOCAL_ADMIN_USERNAME=${LOCAL_ADMIN_USERNAME:-admin}
       - LOCAL_ADMIN_PASSWORD=${LOCAL_ADMIN_PASSWORD:-changeme}
@@ -52,8 +58,11 @@ services:
       - ./templates:/app/templates
       - huggingface_cache:/root/.cache/huggingface
   worker:
-    build: .
-    command: ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=INFO", "-c", "20"]
+    build:
+      context: .
+      target: worker
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     environment:
       - BROKER_URL=${BROKER_URL:-redis://redis:6379/1}
       - RESULT_BACKEND=${RESULT_BACKEND:-redis://redis:6379/2}
@@ -69,7 +78,10 @@ services:
       - TORCH_LOAD_SAFE_MODE=1
       - TRANSFORMERS_OFFLINE=0
       - USE_ESTONIAN_MODEL=${USE_ESTONIAN_MODEL:-true}
-      - ESTONIAN_MODEL=${ESTONIAN_MODEL:-TalTechNLP/whisper-large-v3-turbo-et-verbatim}
+      - ESTONIAN_MODEL=${ESTONIAN_MODEL:-/models/estonian-model}
+      - USE_AI_SUMMARIZATION=${USE_AI_SUMMARIZATION:-true}
+      - AI_SUMMARIZATION_MODEL=${AI_SUMMARIZATION_MODEL:-qwen}
+      - AI_MODELS_DIR=${AI_MODELS_DIR:-/models/estonian-ai}
       - PYANNOTE_AUTH_TOKEN
       - PYANNOTE_DIARIZATION_MODEL=${PYANNOTE_DIARIZATION_MODEL:-pyannote/speaker-diarization-3.1}
       - PYANNOTE_LOCAL_PATH=${PYANNOTE_LOCAL_PATH:-}

@@ -60,9 +60,21 @@ class Settings(BaseSettings):
 	gpu_backend: str | None = Field(default=None, alias="GPU_BACKEND")
 	gpu_device_id: int = Field(default=0, alias="GPU_DEVICE_ID")
 	
-	# Estonian models from TalTechNLP
-	use_estonian_model: bool = Field(default=True, alias="USE_ESTONIAN_MODEL")  # Enable by default
-	estonian_model: str = Field(default="TalTechNLP/whisper-large-v3-turbo-et-verbatim", alias="ESTONIAN_MODEL")
+	# Estonian ASR models from TalTechNLP
+	use_estonian_model: bool = Field(default=True, alias="USE_ESTONIAN_MODEL")
+	estonian_asr_dir: str = Field(default="/models/estonian-asr", alias="ESTONIAN_ASR_DIR")
+	
+	# English ASR models (faster-whisper)
+	english_asr_dir: str = Field(default="/models/english-asr", alias="ENGLISH_ASR_DIR")
+	
+	# AI Summarization models from TartuNLP
+	use_ai_summarization: bool = Field(default=True, alias="USE_AI_SUMMARIZATION")
+	ai_summarization_model: str = Field(default="llama", alias="AI_SUMMARIZATION_MODEL")
+	summarization_dir: str = Field(default="/models/summarization", alias="SUMMARIZATION_DIR")
+	
+	# Grammar Correction
+	use_grammar_correction: bool = Field(default=True, alias="USE_GRAMMAR_CORRECTION")
+	grammar_correction_dir: str = Field(default="/models/grammar-correction", alias="GRAMMAR_CORRECTION_DIR")
 
 	# Pyannote diarization
 	pyannote_auth_token: str | None = Field(default=None, alias="PYANNOTE_AUTH_TOKEN")

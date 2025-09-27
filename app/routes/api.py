@@ -17,6 +17,33 @@ from ..celery_app import celery_app
 
 router = APIRouter()
 
+def find_transcript_file(job_id: str) -> Optional[Path]:
+    """Find transcript file by job_id, looking for both old UUID format and new filename format"""
+    transcript_dir = Path(settings.transcript_dir)
+    
+    # First try the old UUID format
+    old_format = transcript_dir / f"{job_id}.json"
+    if old_format.exists():
+        return old_format
+    
+    # Look for files that might match this job_id
+    # This is a fallback - ideally we'd store the mapping
+    for json_file in transcript_dir.glob("*.json"):
+        if json_file.name != f"{job_id}.json":
+            try:
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if data.get("job_id") == job_id:
+                        return json_file
+            except:
+                continue
+    
+    return None
+
+def get_base_name_from_file(file_path: Path) -> str:
+    """Extract base name from transcript file path"""
+    return file_path.stem
+
 
 logger = logging.getLogger(__name__)
 
@@ -74,22 +101,35 @@ async def upload_video(file: UploadFile = File(...), user=Depends(get_current_us
 
 @router.get("/status/{job_id}")
 async def job_status(job_id: str, user=Depends(get_current_user)):
-    transcript_json = Path(settings.transcript_dir) / f"{job_id}.json"
-    if transcript_json.exists():
+    transcript_json = find_transcript_file(job_id)
+    if transcript_json and transcript_json.exists():
         return {"job_id": job_id, "status": "completed", "percent": 100, "stage": "done"}
-    # read task meta if available
+    
+    # Check if job is still processing by looking at task file
     task_map = Path(settings.transcript_dir) / "_tasks" / f"{job_id}.task"
+    if not task_map.exists():
+        # No task file means job doesn't exist or failed
+        return {"job_id": job_id, "status": "not_found", "percent": 0, "stage": "unknown"}
+    
     stage = "transcribe"
     percent = 10
-    if task_map.exists():
-        try:
-            raw = task_map.read_text(encoding="utf-8").strip()
-            parts = raw.split("|", 2)
-            if len(parts) >= 2:
-                stage = parts[0]
-                percent = int(parts[1])
-        except Exception:
-            pass
+    try:
+        raw = task_map.read_text(encoding="utf-8").strip()
+        parts = raw.split("|", 2)
+        if len(parts) >= 2:
+            stage = parts[0]
+            percent = int(parts[1])
+    except Exception:
+        pass
+    
+    # Check if job has been stuck for too long (more than 30 minutes)
+    try:
+        file_age = time.time() - task_map.stat().st_mtime
+        if file_age > 1800:  # 30 minutes
+            return {"job_id": job_id, "status": "timeout", "percent": percent, "stage": stage}
+    except Exception:
+        pass
+    
     return {"job_id": job_id, "status": "processing", "percent": percent, "stage": stage}
 
 @router.get("/logs/{job_id}")
@@ -103,9 +143,13 @@ async def job_logs(job_id: str, user=Depends(get_current_user)):
 @router.get("/transcript/{job_id}")
 async def get_transcript(job_id: str, format: Optional[str] = "json", user=Depends(get_current_user)):
 	transcript_dir = Path(settings.transcript_dir)
-	json_path = transcript_dir / f"{job_id}.json"
-	txt_path = transcript_dir / f"{job_id}.txt"
-	sum_path = transcript_dir / f"{job_id}.summary.txt"
+	json_path = find_transcript_file(job_id)
+	if not json_path:
+		raise HTTPException(status_code=404, detail="Transcript not found")
+	
+	base_name = get_base_name_from_file(json_path)
+	txt_path = transcript_dir / f"{base_name}.txt"
+	sum_path = transcript_dir / f"{base_name}.summary.txt"
 	if format == "json":
 		if not json_path.exists():
 			raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -191,7 +235,8 @@ def _export_pdf(data, job_id):
 		return FileResponse(
 			path=buffer,
 			filename=f"transcript_{job_id}.pdf",
-			media_type="application/pdf"
+			media_type="application/pdf",
+			background=None
 		)
 	except ImportError:
 		raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="PDF export not available - missing reportlab")
@@ -233,7 +278,8 @@ def _export_docx(data, job_id):
 		return FileResponse(
 			path=buffer,
 			filename=f"transcript_{job_id}.docx",
-			media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+			media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			background=None
 		)
 	except ImportError:
 		raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DOCX export not available - missing python-docx")
@@ -294,7 +340,8 @@ def _export_pptx(data, job_id):
 		return FileResponse(
 			path=buffer,
 			filename=f"transcript_{job_id}.pptx",
-			media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+			media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+			background=None
 		)
 	except ImportError:
 		raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="PPTX export not available - missing python-pptx")
@@ -340,6 +387,11 @@ async def search_transcripts(query: str, user=Depends(get_current_user)):
 	transcript_dir = Path(settings.transcript_dir)
 	results = []
 	
+	if not query or not query.strip():
+		return {"query": query, "results": [], "total": 0}
+	
+	query_lower = query.lower().strip()
+	
 	# Search through all JSON files
 	for json_file in transcript_dir.glob("*.json"):
 		try:
@@ -350,27 +402,101 @@ async def search_transcripts(query: str, user=Depends(get_current_user)):
 			matching_segments = []
 			for segment in data.get('segments', []):
 				text = segment.get('text', '').lower()
-				if query.lower() in text:
+				if query_lower in text:
 					matching_segments.append(segment)
 			
 			# Search in summary
 			summary_matches = []
 			if 'summary' in data and data['summary']:
-				if query.lower() in data['summary'].lower():
+				if query_lower in data['summary'].lower():
 					summary_matches.append(data['summary'])
 			
 			if matching_segments or summary_matches:
+				# Try to get original filename from upload directory
+				upload_dir = Path(settings.upload_dir)
+				filename = None
+				for upload_file in upload_dir.glob(f"{job_id}_*"):
+					if upload_file.is_file():
+						filename = upload_file.name.replace(f"{job_id}_", "")
+						break
+				
 				results.append({
 					"job_id": job_id,
+					"filename": filename,
 					"segments": matching_segments,
 					"summary_matches": summary_matches,
 					"total_segments": len(data.get('segments', [])),
 					"language": data.get('language', 'unknown')
 				})
 		except Exception as e:
+			print(f"Error processing {json_file}: {e}")
 			continue
 	
 	return {"query": query, "results": results, "total": len(results)}
+
+
+@router.get("/jobs")
+async def get_jobs(user=Depends(get_current_user)):
+	"""Get list of all jobs with their status and filenames"""
+	transcript_dir = Path(settings.transcript_dir)
+	jobs = []
+	
+	# Get all JSON files (completed jobs)
+	for json_file in transcript_dir.glob("*.json"):
+		try:
+			data = json.loads(json_file.read_text(encoding="utf-8"))
+			job_id = json_file.stem
+			
+			# Try to get original filename from upload directory
+			upload_dir = Path(settings.upload_dir)
+			filename = None
+			for upload_file in upload_dir.glob(f"{job_id}_*"):
+				if upload_file.is_file():
+					filename = upload_file.name.replace(f"{job_id}_", "")
+					break
+			
+			jobs.append({
+				"job_id": job_id,
+				"filename": filename,
+				"status": "completed",
+				"language": data.get('language', 'unknown'),
+				"created_at": json_file.stat().st_mtime
+			})
+		except Exception:
+			continue
+	
+	# Get processing jobs from task files
+	task_dir = Path(settings.transcript_dir) / "_tasks"
+	if task_dir.exists():
+		for task_file in task_dir.glob("*.task"):
+			job_id = task_file.stem
+			try:
+				# Skip if already completed
+				if any(job['job_id'] == job_id for job in jobs):
+					continue
+				
+				# Try to get filename from upload directory
+				upload_dir = Path(settings.upload_dir)
+				filename = None
+				for upload_file in upload_dir.glob(f"{job_id}_*"):
+					if upload_file.is_file():
+						filename = upload_file.name.replace(f"{job_id}_", "")
+						break
+				
+				jobs.append({
+					"job_id": job_id,
+					"filename": filename,
+					"status": "processing",
+					"language": "unknown",
+					"created_at": task_file.stat().st_mtime
+				})
+			except Exception:
+				continue
+	
+	# Sort by creation time (newest first)
+	jobs.sort(key=lambda x: x['created_at'], reverse=True)
+	
+	return jobs
 
 
 @router.get("/analytics")
@@ -416,4 +542,52 @@ async def get_analytics(user=Depends(get_current_user)):
 		"language_distribution": language_stats,
 		"average_file_size_mb": avg_file_size / (1024 * 1024),
 		"storage_used_mb": sum(file_sizes) / (1024 * 1024)
+	}
+
+@router.delete("/transcripts/clear")
+async def clear_all_transcripts(user=Depends(get_current_user)):
+	"""Clear all user's transcripts with confirmation"""
+	transcript_dir = Path(settings.transcript_dir)
+	
+	# Count files to be deleted
+	json_files = list(transcript_dir.glob("*.json"))
+	txt_files = list(transcript_dir.glob("*.txt"))
+	summary_files = list(transcript_dir.glob("*.summary.txt"))
+	pdf_files = list(transcript_dir.glob("*.pdf"))
+	docx_files = list(transcript_dir.glob("*.docx"))
+	pptx_files = list(transcript_dir.glob("*.pptx"))
+	
+	total_files = len(json_files) + len(txt_files) + len(summary_files) + len(pdf_files) + len(docx_files) + len(pptx_files)
+	
+	if total_files == 0:
+		return {"message": "No transcripts found to delete", "deleted_count": 0}
+	
+	# Delete all transcript files
+	deleted_count = 0
+	for file_list in [json_files, txt_files, summary_files, pdf_files, docx_files, pptx_files]:
+		for file_path in file_list:
+			try:
+				file_path.unlink()
+				deleted_count += 1
+			except Exception as e:
+				logger.error(f"Error deleting file {file_path}: {e}")
+	
+	# Also clear task files
+	task_dir = transcript_dir / "_tasks"
+	if task_dir.exists():
+		for task_file in task_dir.glob("*.task"):
+			try:
+				task_file.unlink()
+			except Exception as e:
+				logger.error(f"Error deleting task file {task_file}: {e}")
+		
+		for log_file in task_dir.glob("*.log"):
+			try:
+				log_file.unlink()
+			except Exception as e:
+				logger.error(f"Error deleting log file {log_file}: {e}")
+	
+	return {
+		"message": f"Successfully deleted {deleted_count} transcript files",
+		"deleted_count": deleted_count
 	}
