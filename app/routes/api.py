@@ -18,25 +18,18 @@ from ..celery_app import celery_app
 router = APIRouter()
 
 def find_transcript_file(job_id: str) -> Optional[Path]:
-    """Find transcript file by job_id, looking for both old UUID format and new filename format"""
+    """Find transcript file by job_id by searching through all JSON files"""
     transcript_dir = Path(settings.transcript_dir)
     
-    # First try the old UUID format
-    old_format = transcript_dir / f"{job_id}.json"
-    if old_format.exists():
-        return old_format
-    
-    # Look for files that might match this job_id
-    # This is a fallback - ideally we'd store the mapping
+    # Look for files that contain this job_id in their JSON content
     for json_file in transcript_dir.glob("*.json"):
-        if json_file.name != f"{job_id}.json":
-            try:
-                with open(json_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if data.get("job_id") == job_id:
-                        return json_file
-            except:
-                continue
+        try:
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if data.get("job_id") == job_id:
+                    return json_file
+        except:
+            continue
     
     return None
 
@@ -170,9 +163,9 @@ async def get_transcript(job_id: str, format: Optional[str] = "json", user=Depen
 async def export_transcript(job_id: str, format: str = "pdf", user=Depends(get_current_user)):
 	"""Export transcript in various formats: pdf, docx"""
 	transcript_dir = Path(settings.transcript_dir)
-	json_path = transcript_dir / f"{job_id}.json"
+	json_path = find_transcript_file(job_id)
 	
-	if not json_path.exists():
+	if not json_path or not json_path.exists():
 		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found")
 	
 	data = json.loads(json_path.read_text(encoding="utf-8"))
@@ -360,7 +353,7 @@ async def search_transcripts(query: str, user=Depends(get_current_user)):
 				
 				results.append({
 					"job_id": job_id,
-					"filename": filename,
+					"filename": data.get('original_filename', filename),
 					"segments": matching_segments,
 					"summary_matches": summary_matches,
 					"total_segments": len(data.get('segments', [])),
@@ -380,10 +373,18 @@ async def get_jobs(user=Depends(get_current_user)):
 	jobs = []
 	
 	# Get all JSON files (completed jobs)
+	seen_jobs = set()  # Track seen job_ids to avoid duplicates
+	
 	for json_file in transcript_dir.glob("*.json"):
 		try:
 			data = json.loads(json_file.read_text(encoding="utf-8"))
-			job_id = json_file.stem
+			job_id = data.get("job_id")  # Use job_id from JSON content, not filename
+			
+			# Skip if we've already seen this job_id
+			if job_id in seen_jobs:
+				print(f"Skipping duplicate job_id: {job_id}")
+				continue
+			seen_jobs.add(job_id)
 			
 			# Try to get original filename from upload directory
 			upload_dir = Path(settings.upload_dir)
@@ -395,12 +396,13 @@ async def get_jobs(user=Depends(get_current_user)):
 			
 			jobs.append({
 				"job_id": job_id,
-				"filename": filename,
+				"filename": data.get('original_filename', filename),
 				"status": "completed",
 				"language": data.get('language', 'unknown'),
 				"created_at": json_file.stat().st_mtime
 			})
-		except Exception:
+		except Exception as e:
+			print(f"Error processing {json_file}: {e}")
 			continue
 	
 	# Get processing jobs from task files
@@ -409,9 +411,10 @@ async def get_jobs(user=Depends(get_current_user)):
 		for task_file in task_dir.glob("*.task"):
 			job_id = task_file.stem
 			try:
-				# Skip if already completed
-				if any(job['job_id'] == job_id for job in jobs):
+				# Skip if already completed or already seen
+				if job_id in seen_jobs:
 					continue
+				seen_jobs.add(job_id)
 				
 				# Try to get filename from upload directory
 				upload_dir = Path(settings.upload_dir)
@@ -428,7 +431,8 @@ async def get_jobs(user=Depends(get_current_user)):
 					"language": "unknown",
 					"created_at": task_file.stat().st_mtime
 				})
-			except Exception:
+			except Exception as e:
+				print(f"Error processing task file {task_file}: {e}")
 				continue
 	
 	# Sort by creation time (newest first)
@@ -480,6 +484,54 @@ async def get_analytics(user=Depends(get_current_user)):
 		"language_distribution": language_stats,
 		"average_file_size_mb": avg_file_size / (1024 * 1024),
 		"storage_used_mb": sum(file_sizes) / (1024 * 1024)
+	}
+
+@router.post("/transcripts/cleanup")
+async def cleanup_duplicate_transcripts(user=Depends(get_current_user)):
+	"""Clean up duplicate transcript files"""
+	transcript_dir = Path(settings.transcript_dir)
+	cleaned_count = 0
+	
+	# Group files by job_id from JSON content
+	job_files = {}
+	
+	for json_file in transcript_dir.glob("*.json"):
+		try:
+			data = json.loads(json_file.read_text(encoding="utf-8"))
+			job_id = data.get("job_id")
+			if job_id:
+				if job_id not in job_files:
+					job_files[job_id] = []
+				job_files[job_id].append(json_file)
+		except Exception as e:
+			print(f"Error processing {json_file}: {e}")
+			continue
+	
+	# For each job_id, keep only the most recent file
+	for job_id, files in job_files.items():
+		if len(files) > 1:
+			# Sort by modification time (newest first)
+			files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+			
+			# Keep the newest file, delete the rest
+			for old_file in files[1:]:
+				try:
+					# Also delete associated .txt and .summary.txt files
+					base_name = old_file.stem
+					for ext in ['.txt', '.summary.txt']:
+						related_file = transcript_dir / f"{base_name}{ext}"
+						if related_file.exists():
+							related_file.unlink()
+					
+					old_file.unlink()
+					cleaned_count += 1
+					print(f"Removed duplicate file: {old_file}")
+				except Exception as e:
+					print(f"Error removing {old_file}: {e}")
+	
+	return {
+		"message": f"Cleaned up {cleaned_count} duplicate transcript files",
+		"cleaned_count": cleaned_count
 	}
 
 @router.delete("/transcripts/clear")

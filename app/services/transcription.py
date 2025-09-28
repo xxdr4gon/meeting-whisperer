@@ -64,22 +64,32 @@ def _get_et_pipeline(model_name: str, use_gpu: bool):
         from transformers import WhisperForConditionalGeneration, WhisperProcessor
         import torch
         
-        print("Loading Whisper model and processor with accelerate...")
-        use_accelerate = True  # We're using accelerate
+        print("Loading Whisper model and processor...")
+        use_accelerate = True  # Default to using accelerate
         try:
-            # Use accelerate for faster model loading
-            from accelerate import init_empty_weights, load_checkpoint_and_dispatch
-            from accelerate.utils import get_balanced_memory
+            # Test GPU availability first
+            if use_gpu:
+                if not torch.cuda.is_available():
+                    print("CUDA not available for Estonian model, falling back to CPU")
+                    use_gpu = False
+                else:
+                    print(f"CUDA available for Estonian model: {torch.cuda.get_device_name(0)}")
             
-            # Load from local directory with accelerate
+            # Clear GPU cache before loading
+            if use_gpu and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                print(f"GPU memory before Estonian model: {torch.cuda.memory_allocated() / 1024**3:.2f}GB / {torch.cuda.memory_reserved() / 1024**3:.2f}GB")
+            
+            # Load from local directory with conservative memory settings
             model = WhisperForConditionalGeneration.from_pretrained(
                 local_dir,
-                dtype=torch.float32,
-                low_cpu_mem_usage=True,
+                torch_dtype=torch.float16 if use_gpu else torch.float32,
+                device_map="auto" if use_gpu else "cpu",  # Use GPU if available
                 trust_remote_code=True,  # Allow custom code
                 local_files_only=True,   # Only use local files
                 use_safetensors=True,    # Use safetensors if available
-                device_map="cpu"         # Explicitly set to CPU
+                low_cpu_mem_usage=True,  # Conservative memory usage
+                max_memory={0: "6GB"} if use_gpu else None  # Limit GPU memory usage
             )
             processor = WhisperProcessor.from_pretrained(
                 local_dir,
@@ -270,7 +280,7 @@ def _process_long_audio_chunked(asr, audio_path: str, duration: float):
         return {"text": "", "chunks": []}
 
 
-def _get_faster_whisper_model(use_gpu: bool):
+def _get_faster_whisper_model(use_gpu: bool = True):  # Default to GPU for testing
     """Get cached faster-whisper model for speed with accelerate optimization"""
     global _FASTER_WHISPER_MODEL
     if _FASTER_WHISPER_MODEL is not None:
@@ -284,25 +294,34 @@ def _get_faster_whisper_model(use_gpu: bool):
         device = "cuda" if use_gpu else "cpu"
         compute_type = "float16" if use_gpu else "int8"
         
-        print("Loading faster-whisper model with accelerate optimization...")
+        print("Loading faster-whisper model...")
         try:
-            # Use accelerate for faster model loading
-            from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+            # Test GPU availability first
+            if use_gpu:
+                import torch
+                if not torch.cuda.is_available():
+                    print("CUDA not available, falling back to CPU")
+                    device = "cpu"
+                    compute_type = "int8"
+                else:
+                    print(f"CUDA available, using GPU: {torch.cuda.get_device_name(0)}")
             
             _FASTER_WHISPER_MODEL = WhisperModel(
                 "base",  # Changed from "tiny" to "base" for better accuracy
                 device=device, 
                 compute_type=compute_type,
-                download_root="/models/english-asr",
-                local_files_only=False,  # Allow downloading with accelerate
-                use_safetensors=True     # Use safetensors if available
+                download_root="/models/english-asr"
             )
-            print("Faster-whisper model loaded with accelerate")
+            print(f"Faster-whisper model loaded successfully on {device}")
         except Exception as e:
-            print(f"Failed to load with accelerate: {e}")
-            # Fallback to standard loading
-            _FASTER_WHISPER_MODEL = WhisperModel("base", device=device, compute_type=compute_type)
-            print("Faster-whisper model loaded (standard)")
+            print(f"Failed to load faster-whisper on {device}: {e}")
+            # Fallback to CPU if GPU fails
+            try:
+                _FASTER_WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
+                print("Faster-whisper model loaded (CPU fallback)")
+            except Exception as cpu_error:
+                print(f"CPU fallback also failed: {cpu_error}")
+                raise cpu_error
         
         return _FASTER_WHISPER_MODEL
 
@@ -480,10 +499,27 @@ def _run_faster_whisper(audio_path: str) -> Dict:
 	)
 	
 	out_segments = []
+	total_corrections = 0
+	
 	for s in segments:
 		# Apply technical terms post-processing
 		corrected_text = _apply_technical_corrections(s.text.strip())
+		
+		# Apply grammar correction if enabled
+		if settings.use_grammar_correction:
+			try:
+				from .grammar_correction import correct_estonian_grammar
+				correction_result = correct_estonian_grammar(corrected_text)
+				corrected_text = correction_result["corrected_text"]
+				total_corrections += correction_result["corrections_applied"]
+			except Exception as e:
+				print(f"Grammar correction failed for segment: {e}")
+		
 		out_segments.append({"start": s.start, "end": s.end, "text": corrected_text})
+	
+	if settings.use_grammar_correction and total_corrections > 0:
+		print(f"Grammar correction completed: {total_corrections} total corrections applied")
+	
 	return {"segments": out_segments, "language": info.language}
 
 
@@ -548,3 +584,30 @@ def _detect_language(audio_path: str) -> str:
 	except Exception as e:
 		print(f"Language detection failed: {e}")
 		return "en"  # Default to English
+
+
+def unload_estonian_model():
+	"""Unload Estonian model to free GPU memory"""
+	global _ET_ASR
+	if _ET_ASR is not None:
+		del _ET_ASR
+		_ET_ASR = None
+		import torch
+		if torch.cuda.is_available():
+			torch.cuda.empty_cache()
+		print("Estonian model unloaded from GPU memory")
+
+
+def unload_ai_summarizer():
+	"""Unload AI summarizer to free GPU memory"""
+	global _ESTONIAN_SUMMARIZER, _ESTONIAN_TOKENIZER
+	if _ESTONIAN_SUMMARIZER is not None:
+		del _ESTONIAN_SUMMARIZER
+		_ESTONIAN_SUMMARIZER = None
+	if _ESTONIAN_TOKENIZER is not None:
+		del _ESTONIAN_TOKENIZER
+		_ESTONIAN_TOKENIZER = None
+	import torch
+	if torch.cuda.is_available():
+		torch.cuda.empty_cache()
+	print("AI summarizer unloaded from GPU memory")

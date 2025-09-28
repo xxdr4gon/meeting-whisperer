@@ -106,19 +106,49 @@ def process_video_task(self, video_path: str, job_id: str, user_email: str | Non
         _log(job_id, "Summarizing transcript")
         plain_text = "\n".join(seg.get("text", "") for seg in transcript.get("segments", []))
         
+        # Unload Estonian model to free GPU memory for AI summarization
+        from app.services.transcription import unload_estonian_model
+        unload_estonian_model()
+        
+        # Additional aggressive memory cleanup
+        import torch
+        import time
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            # Force garbage collection
+            import gc
+            gc.collect()
+            # Reset peak memory stats
+            torch.cuda.reset_peak_memory_stats()
+            print(f"GPU memory after cleanup: {torch.cuda.memory_allocated() / 1024**3:.2f}GB / {torch.cuda.memory_reserved() / 1024**3:.2f}GB")
+            print(f"GPU memory peak: {torch.cuda.max_memory_allocated() / 1024**3:.2f}GB")
+            # Small delay to ensure memory is fully freed
+            time.sleep(2)
+        
         # Use AI summarization if enabled, otherwise fallback to rule-based
         if settings.use_ai_summarization:
             try:
                 detected_language = transcript.get("language", "et")
+                _log(job_id, f"Starting AI summarization for language: {detected_language}")
                 summary = create_ai_meeting_summary(plain_text, detected_language)
                 _log(job_id, "AI summarization completed")
+                
+                # Unload AI summarizer to free GPU memory
+                from app.services.ai_summarize import unload_ai_summarizer
+                unload_ai_summarizer()
+                _log(job_id, "AI summarizer unloaded from GPU memory")
+                
             except Exception as e:
                 _log(job_id, f"AI summarization failed: {e}, using fallback")
+                _log(job_id, "AI summarization failed - will use rule-based summarization")
                 summary = summarize_text(plain_text, max_sentences=7)
         else:
+            _log(job_id, "Using rule-based summarization")
             summary = summarize_text(plain_text, max_sentences=7)
         result = {
             "job_id": job_id,
+            "original_filename": original_filename,
             "segments": transcript.get("segments", []),
             "language": transcript.get("language"),
             "speakers": diar.get("speakers", []),
