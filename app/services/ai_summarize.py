@@ -517,18 +517,18 @@ def create_ai_meeting_summary(transcript: str, language: str = "et") -> str:
     
     # Create formatted summary
     if language == "et":
-        header = "📋 KOKKUVÕTE"
+        header = "KOKKUVÕTE"
         overview = f"Kokku arutelupunkte: {statement_count} väidet"
-        ai_section = "🤖 AI KOKKUVÕTE"
+        ai_section = "AI KOKKUVÕTE"
     else:
-        header = "📋 MEETING SUMMARY"
+        header = "MEETING SUMMARY"
         overview = f"Total discussion points: {statement_count} statements"
-        ai_section = "🤖 AI SUMMARY"
+        ai_section = "AI SUMMARY"
     
     summary_parts = [
         header,
         "=" * 50,
-        f"\n📊 OVERVIEW",
+        f"\nOVERVIEW",
         overview,
         f"\n{ai_section}",
         ai_summary,

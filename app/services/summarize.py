@@ -83,58 +83,58 @@ def generate_memo(analysis: Dict[str, Any], sentences: List[str]) -> str:
     memo_parts = []
     
     # Header
-    memo_parts.append("📋 MEETING SUMMARY")
+    memo_parts.append("MEETING SUMMARY")
     memo_parts.append("=" * 50)
     
     # Overview
-    memo_parts.append(f"\n📊 OVERVIEW")
+    memo_parts.append(f"\nOVERVIEW")
     memo_parts.append(f"Total discussion points: {analysis['total_sentences']} statements")
     
     # Problems identified
     if analysis['problems']:
-        memo_parts.append(f"\n🚨 PROBLEMS IDENTIFIED")
+        memo_parts.append(f"\nPROBLEMS IDENTIFIED")
         for i, problem in enumerate(analysis['problems'], 1):
             memo_parts.append(f"{i}. {problem}")
     
     # Solutions discussed
     if analysis['solutions']:
-        memo_parts.append(f"\n💡 SOLUTIONS DISCUSSED")
+        memo_parts.append(f"\nSOLUTIONS DISCUSSED")
         for i, solution in enumerate(analysis['solutions'], 1):
             memo_parts.append(f"{i}. {solution}")
     
     # Decisions made
     if analysis['decisions']:
-        memo_parts.append(f"\n✅ DECISIONS MADE")
+        memo_parts.append(f"\nDECISIONS MADE")
         for i, decision in enumerate(analysis['decisions'], 1):
             memo_parts.append(f"{i}. {decision}")
     
     # Key points
     if analysis['key_points']:
-        memo_parts.append(f"\n🔑 KEY POINTS")
+        memo_parts.append(f"\nKEY POINTS")
         for i, point in enumerate(analysis['key_points'], 1):
             memo_parts.append(f"{i}. {point}")
     
     # Action items
     if analysis['action_items']:
-        memo_parts.append(f"\n📝 ACTION ITEMS")
+        memo_parts.append(f"\nACTION ITEMS")
         for i, action in enumerate(analysis['action_items'], 1):
             memo_parts.append(f"{i}. {action}")
     
     # Events mentioned
     if analysis['events']:
-        memo_parts.append(f"\n📅 EVENTS MENTIONED")
+        memo_parts.append(f"\nEVENTS MENTIONED")
         for i, event in enumerate(analysis['events'], 1):
             memo_parts.append(f"{i}. {event}")
     
     # People involved
     if analysis['people']:
-        memo_parts.append(f"\n👥 PEOPLE INVOLVED")
+        memo_parts.append(f"\nPEOPLE INVOLVED")
         for i, person in enumerate(analysis['people'], 1):
             memo_parts.append(f"{i}. {person}")
     
     # If no structured content found, provide a general summary
     if not any([analysis['problems'], analysis['solutions'], analysis['decisions'], analysis['key_points'], analysis['action_items'], analysis['events'], analysis['people']]):
-        memo_parts.append(f"\n📄 GENERAL SUMMARY")
+        memo_parts.append(f"\nGENERAL SUMMARY")
         # Take first few sentences as general summary
         general_summary = sentences[:min(5, len(sentences))]
         for i, sentence in enumerate(general_summary, 1):
@@ -151,47 +151,47 @@ def generate_intelligent_summary(analysis: Dict[str, Any], sentences: List[str])
     summary_parts = []
     
     # Header
-    summary_parts.append("📋 MEETING SUMMARY")
+    summary_parts.append("MEETING SUMMARY")
     summary_parts.append("=" * 50)
     
     # Overview
-    summary_parts.append(f"\n📊 OVERVIEW")
+    summary_parts.append(f"\nOVERVIEW")
     summary_parts.append(f"Total discussion points: {analysis['total_sentences']} statements")
     
     # Create intelligent summaries for each category
     if analysis['events']:
-        summary_parts.append(f"\n📅 KEY EVENTS")
+        summary_parts.append(f"\nKEY EVENTS")
         event_summary = synthesize_events(analysis['events'])
         summary_parts.append(event_summary)
     
     if analysis['people']:
-        summary_parts.append(f"\n👥 PEOPLE INVOLVED")
+        summary_parts.append(f"\nPEOPLE INVOLVED")
         people_summary = synthesize_people(analysis['people'])
         summary_parts.append(people_summary)
     
     if analysis['problems']:
-        summary_parts.append(f"\n🚨 ISSUES IDENTIFIED")
+        summary_parts.append(f"\nISSUES IDENTIFIED")
         problem_summary = synthesize_problems(analysis['problems'])
         summary_parts.append(problem_summary)
     
     if analysis['solutions']:
-        summary_parts.append(f"\n💡 SOLUTIONS DISCUSSED")
+        summary_parts.append(f"\nSOLUTIONS DISCUSSED")
         solution_summary = synthesize_solutions(analysis['solutions'])
         summary_parts.append(solution_summary)
     
     if analysis['decisions']:
-        summary_parts.append(f"\n✅ DECISIONS MADE")
+        summary_parts.append(f"\nDECISIONS MADE")
         decision_summary = synthesize_decisions(analysis['decisions'])
         summary_parts.append(decision_summary)
     
     if analysis['action_items']:
-        summary_parts.append(f"\n📝 ACTION ITEMS")
+        summary_parts.append(f"\nACTION ITEMS")
         action_summary = synthesize_actions(analysis['action_items'])
         summary_parts.append(action_summary)
     
     # If no structured content found, create a general summary
     if not any([analysis['events'], analysis['people'], analysis['problems'], analysis['solutions'], analysis['decisions'], analysis['action_items']]):
-        summary_parts.append(f"\n📄 GENERAL SUMMARY")
+        summary_parts.append(f"\nGENERAL SUMMARY")
         general_summary = create_general_summary(sentences)
         summary_parts.append(general_summary)
     

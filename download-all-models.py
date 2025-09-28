@@ -39,11 +39,11 @@ def download_with_progress(repo_id, local_dir, description, use_symlinks=False):
             max_workers=4
         )
         
-        print_status(f"✅ Successfully downloaded: {description}")
+        print_status(f"Successfully downloaded: {description}")
         return True
         
     except Exception as e:
-        print_status(f"❌ Failed to download {description}: {e}", "ERROR")
+        print_status(f"Failed to download {description}: {e}", "ERROR")
         return False
 
 def download_dataset_with_progress(repo_id, local_dir, description):
@@ -68,12 +68,12 @@ def download_dataset_with_progress(repo_id, local_dir, description):
         with open(dataset_path, 'w', encoding='utf-8') as f:
             json.dump(dataset['train'].to_dict(), f, ensure_ascii=False, indent=2)
         
-        print_status(f"✅ Successfully downloaded dataset: {description}")
+        print_status(f"Successfully downloaded dataset: {description}")
         print_status(f"Dataset saved to: {dataset_path}")
         return True
         
     except Exception as e:
-        print_status(f"❌ Failed to download dataset {description}: {e}", "ERROR")
+        print_status(f"Failed to download dataset {description}: {e}", "ERROR")
         return False
 
 def verify_download(local_dir, required_files=None):
@@ -100,7 +100,7 @@ def main():
     
     base_dir = Path(args.base_dir)
     
-    print_status("🚀 Starting comprehensive model download for Meeting Whisperer")
+    print_status("Starting comprehensive model download for Meeting Whisperer")
     print_status("=" * 60)
     
     # Define all downloads
@@ -119,7 +119,7 @@ def main():
     if not args.skip_qwen:
         downloads.append({
             "type": "model",
-            "repo_id": "tartuNLP/Qwen2.5-3B-Instruct-hsb-dsb",
+            "repo_id": "Qwen/Qwen2.5-3B-Instruct",
             "local_dir": str(base_dir / "summarization" / "qwen"),
             "description": "Qwen AI Summarization Model (3B parameters)",
             "required_files": ["config.json", "tokenizer.json"]
@@ -149,7 +149,7 @@ def main():
     
     # Download each item
     for i, download in enumerate(downloads, 1):
-        print_status(f"📦 Download {i}/{len(downloads)}: {download['description']}")
+        print_status(f"Download {i}/{len(downloads)}: {download['description']}")
         print_status("-" * 40)
         
         if download["type"] == "model":
@@ -170,10 +170,10 @@ def main():
         if success:
             verified = verify_download(download["local_dir"], download.get("required_files"))
             if verified:
-                print_status(f"✅ Verification passed: {download['description']}")
+                print_status(f"Verification passed: {download['description']}")
                 results.append(True)
             else:
-                print_status(f"⚠️  Verification failed: {download['description']}", "WARNING")
+                print_status(f"Verification failed: {download['description']}", "WARNING")
                 results.append(False)
         else:
             results.append(False)
@@ -181,28 +181,28 @@ def main():
         print_status("")  # Empty line for readability
     
     # Summary
-    print_status("📊 DOWNLOAD SUMMARY")
+    print_status("DOWNLOAD SUMMARY")
     print_status("=" * 60)
     
     successful = sum(results)
     total = len(results)
     
     for i, (download, success) in enumerate(zip(downloads, results), 1):
-        status = "✅ SUCCESS" if success else "❌ FAILED"
+        status = "SUCCESS" if success else "FAILED"
         print_status(f"{i}. {download['description']}: {status}")
     
     print_status("")
     print_status(f"Total: {successful}/{total} downloads successful")
     
     if successful == total:
-        print_status("🎉 All downloads completed successfully!")
+        print_status("All downloads completed successfully!")
         print_status("Your Meeting Whisperer is ready to use!")
     else:
-        print_status("⚠️  Some downloads failed. Check the logs above for details.", "WARNING")
+        print_status("Some downloads failed. Check the logs above for details.", "WARNING")
         print_status("You can retry failed downloads by running the script again.")
     
     print_status("")
-    print_status("📁 Directory structure created:")
+    print_status("Directory structure created:")
     print_status(f"  {base_dir}/estonian-asr/          # Estonian ASR models")
     print_status(f"  {base_dir}/summarization/qwen/    # Qwen summarization model")
     print_status(f"  {base_dir}/summarization/llama/   # Llama summarization model")
