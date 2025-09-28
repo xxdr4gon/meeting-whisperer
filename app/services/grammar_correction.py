@@ -73,7 +73,7 @@ def _load_grammar_dataset() -> Optional[Dict]:
         def _append_pairs(pairs: List[Tuple[str, str]], source: str) -> None:
             added = 0
             for original, correct in pairs:
-            if not original or not correct:
+                if not original or not correct:
                     continue
                 original_strings.append(original)
                 correct_strings.append(correct)
