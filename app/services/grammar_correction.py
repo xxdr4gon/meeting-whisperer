@@ -37,48 +37,111 @@ def _load_grammar_dataset() -> Optional[Dict]:
         # Try to load from local directory
         grammar_dir = Path(settings.grammar_correction_dir)
         
-        # Try different file formats
-        dataset_files = [
+        candidate_paths = {
             grammar_dir / "dataset.json",
             grammar_dir / "grammar_l2_train.jsonl",
             grammar_dir / "grammar_l2_test.jsonl",
-            grammar_dir / "grammar_l2_train.json",  # Add JSON variant
-            grammar_dir / "grammar_l2_test.json"    # Add JSON variant
-        ]
-        
+            grammar_dir / "grammar_l2_train.json",
+            grammar_dir / "grammar_l2_test.json",
+            grammar_dir / "grammar2_et.jsonl",
+            grammar_dir / "grammar2_et.json",
+            grammar_dir / "grammar_combined.jsonl"
+        }
+
+        # Discover additional datasets placed in nested directories (e.g. et_1, et_2)
+        for pattern in ("**/*.jsonl", "**/*.json"):
+            for discovered in grammar_dir.glob(pattern):
+                candidate_paths.add(discovered)
+
+        # Ignore known non-dataset files (custom dictionary, configs, etc.)
+        def _is_dataset_path(path: Path) -> bool:
+            name = path.name.lower()
+            if not path.exists():
+                return False
+            if name.startswith("custom_dictionary"):
+                return False
+            if name.endswith("training_config.json"):
+                return False
+            return True
+
+        dataset_files = [path for path in sorted(candidate_paths) if _is_dataset_path(path)]
+
+        original_strings: List[str] = []
+        correct_strings: List[str] = []
+        loaded_sources: List[str] = []
+
+        def _append_pairs(pairs: List[Tuple[str, str]], source: str) -> None:
+            added = 0
+            for original, correct in pairs:
+            if not original or not correct:
+                    continue
+                original_strings.append(original)
+                correct_strings.append(correct)
+                added += 1
+            if added:
+                loaded_sources.append(f"{source}: {added} pairs")
+
         try:
             for dataset_file in dataset_files:
-                if dataset_file.exists():
-                    if dataset_file.suffix == '.json':
-                        # JSON format
-                        with open(dataset_file, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            _GRAMMAR_DATASET = data
-                            print(f"Loaded grammar dataset from JSON: {len(data.get('original_string', []))} correction pairs")
-                            return _GRAMMAR_DATASET
-                    elif dataset_file.suffix == '.jsonl':
-                        # JSONL format - convert to expected format
-                        original_strings = []
-                        correct_strings = []
-                        
-                        with open(dataset_file, 'r', encoding='utf-8') as f:
-                            for line in f:
-                                if line.strip():
-                                    item = json.loads(line.strip())
-                                    original_strings.append(item.get('original', ''))
-                                    correct_strings.append(item.get('correct', ''))
-                        
-                        _GRAMMAR_DATASET = {
-                            'original_string': original_strings,
-                            'correct_string': correct_strings
-                        }
-                        print(f"Loaded grammar dataset from JSONL: {len(original_strings)} correction pairs")
-                        return _GRAMMAR_DATASET
-            
-            print(f"Grammar dataset not found in {grammar_dir}")
-            print("Please run: python download-all-models.py")
-            return None
-                
+                if not dataset_file.exists():
+                    continue
+
+                pairs: List[Tuple[str, str]] = []
+
+                if dataset_file.suffix == '.json':
+                    with open(dataset_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    if isinstance(data, dict) and 'original_string' in data and 'correct_string' in data:
+                        pairs = list(zip(data.get('original_string', []), data.get('correct_string', [])))
+                    elif isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict):
+                                pairs.append((item.get('original') or item.get('source') or '', item.get('correct') or item.get('target') or ''))
+                elif dataset_file.suffix == '.jsonl':
+                    with open(dataset_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if not line.strip():
+                                continue
+                            try:
+                                item = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            original = item.get('original') or item.get('original_string') or item.get('source') or ''
+                            correct = item.get('correct') or item.get('correct_string') or item.get('target') or ''
+                            pairs.append((original, correct))
+
+                if pairs:
+                    _append_pairs(pairs, dataset_file.name)
+
+            if not original_strings:
+                print(f"Grammar dataset not found in {grammar_dir}")
+                print("Please run: python scripts/prepare_grammar_datasets.py")
+                return None
+
+            # Deduplicate while preserving order
+            seen = set()
+            dedup_original: List[str] = []
+            dedup_correct: List[str] = []
+            for original, correct in zip(original_strings, correct_strings):
+                key = (original, correct)
+                if key in seen:
+                    continue
+                seen.add(key)
+                dedup_original.append(original)
+                dedup_correct.append(correct)
+
+            _GRAMMAR_DATASET = {
+                'original_string': dedup_original,
+                'correct_string': dedup_correct
+            }
+
+            if loaded_sources:
+                print("Loaded grammar datasets:")
+                for source_info in loaded_sources:
+                    print(f"  - {source_info}")
+            print(f"Total grammar correction pairs available: {len(dedup_original)}")
+            return _GRAMMAR_DATASET
+
         except Exception as e:
             print(f"Failed to load grammar dataset: {e}")
             return None
